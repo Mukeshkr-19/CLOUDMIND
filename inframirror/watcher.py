@@ -200,21 +200,25 @@ def _trigger_healthy_dialogue():
     
     gemini_prompt = """
     You are the AI Orchestrator for 'CloudMind', a system where microservices behave like characters in the movie 'Inside Out'.
-    Currently, the cluster is operating perfectly in a HEALTHY state with all metrics green.
+    Currently, the cluster is operating perfectly in a HEALTHY, calm state.
 
-    Write a short, engaging, 3-line script where the services speak in their character voices in a Discord chat room:
+    Write a short, engaging, 3-line Slack-style chat dialogue where the services banter in their character voices:
     Characters:
-    - Joy (Frontend): Positive, energetic, hates lag.
-    - Logic (API): Technical, efficient, precise.
-    - Memory (Database): Calm, relieved that write buffers are clean.
-    - Swift (Cache): Hyper-active, fast, showing high hit ratios.
-    - Gatekeeper (Auth): Snarky, security-minded, sarcastic.
+    - Joy (Frontend): Positive, energetic, loves fast load times, highly protective of users.
+    - Logic (API): Technical, efficient, analytical, precise, hates unnecessary fluff.
+    - Memory (Database): Calm, relieved that write buffers are clean, cautiously indexing.
+    - Swift (Cache): Hyper-active, fast, showing high hit ratios, easily excited.
+    - Gatekeeper (Auth): Snarky, security-minded, sarcastic, paranoid about malicious payloads.
 
     Guidelines:
-    1. Show a peaceful, happy, or sarcastic character interaction about the healthy status.
-    2. Have 2 or 3 characters participate.
-    3. Keep it brief (max 3 lines of dialogue). Do not include any introductory or concluding text, markdown styling for headings, or standard logs—just write the dialogues directly.
-    Format each line as: **[Character Name]**: "Dialogue"
+    1. Make it sound extremely natural, funny, and witty (like tech colleagues bantering on Slack/Discord using slang, casual tone, or emojis) rather than formal robot reports!
+    2. Write exactly 3 lines of dialogue. Do not include any introductory or concluding text, markdown headings, or other logs—just write the dialogues directly.
+    3. You MUST format each line exactly with the full bracketed tags:
+       **[Joy - Frontend]**: "Dialogue"
+       **[Logic - API]**: "Dialogue"
+       **[Memory - Database]**: "Dialogue"
+       **[Swift - Cache]**: "Dialogue"
+       **[Gatekeeper - Auth]**: "Dialogue"
     """
     
     dialogue = ""
@@ -231,10 +235,11 @@ def _trigger_healthy_dialogue():
     
     _save_dialogue_to_volume(dialogue)
     
-    try:
-        requests.post("http://frontend:5050/dialogue", json={"dialogue": dialogue}, timeout=2)
-    except Exception:
-        pass
+    # commented out duplicate POST to frontend; shared volume catalogues dialogues directly on disk
+    # try:
+    #     requests.post("http://frontend:5050/dialogue", json={"dialogue": dialogue}, timeout=2)
+    # except Exception:
+    #     pass
 
 def _save_dialogue_to_volume(dialogue: str):
     shared_dir = "/app/shared"
@@ -275,21 +280,25 @@ def _trigger_incident_dialogue(service: str, cpu: float, latency: float):
     
     gemini_prompt = f"""
     You are the AI Orchestrator for 'CloudMind', a system where microservices behave like characters in the movie 'Inside Out'.
-    Currently, the '{service}' microservice is in CRITICAL state (CPU={cpu:.1f}%, Latency={latency:.0f}ms).
+    Currently, the '{service}' microservice is in a CRITICAL state (CPU={cpu:.1f}%, Latency={latency:.0f}ms).
 
-    Write a short, engaging, 4-line script where the services speak in their character voices in a Discord chat room:
+    Write a short, engaging, 4-line Slack-style chat dialogue where the services panic and argue in their character voices:
     Characters:
-    - Joy (Frontend): Positive, energetic, hates lag.
-    - Logic (API): Technical, focused, impatient.
-    - Memory (Database): Nervous, cautious, panics under load.
-    - Swift (Cache): Hyper-active, fast, gets tired quickly.
-    - Gatekeeper (Auth): Snarky, security-obsessed, sarcastic.
+    - Joy (Frontend): Energetic, panics when lag spikes, begs for quick page loads.
+    - Logic (API): Highly technical, stressed, impatient, trying to route around bottlenecks.
+    - Memory (Database): Extremely nervous, cautious, panics under read/write lock contentions.
+    - Swift (Cache): Hyper-active, fast, gets exhausted under cache misses or high eviction spikes.
+    - Gatekeeper (Auth): Snarky, paranoid, sarcastic, ready to throttle traffic under signature delays.
 
     Guidelines:
-    1. Show '{service}' complaining or panicking in character.
-    2. Have 2 other services chime in with their characters reacting to the metrics.
-    3. Keep it brief (max 4 lines of dialogue). Do not include any introductory or concluding text, markdown styling for headings, or standard logs—just write the dialogues directly.
-    Format each line as: **[Character Name]**: "Dialogue"
+    1. Make it sound extremely natural, realistic, funny, and dramatic (like real engineers arguing on a panic channel during a production outage using casual slang, panic tone, or emojis) rather than robotic reports!
+    2. Write exactly 4 lines of dialogue. Do not include any introductory or concluding text, markdown headings, or other logs—just write the dialogues directly.
+    3. You MUST format each line exactly with the full bracketed tags so our parser maps CSS colors:
+       **[Joy - Frontend]**: "Dialogue"
+       **[Logic - API]**: "Dialogue"
+       **[Memory - Database]**: "Dialogue"
+       **[Swift - Cache]**: "Dialogue"
+       **[Gatekeeper - Auth]**: "Dialogue"
     """
     
     dialogue = ""
@@ -306,10 +315,11 @@ def _trigger_incident_dialogue(service: str, cpu: float, latency: float):
     
     _save_dialogue_to_volume(dialogue)
     
-    try:
-        requests.post("http://frontend:5050/dialogue", json={"dialogue": dialogue}, timeout=2)
-    except Exception:
-        pass
+    # commented out duplicate POST to frontend; shared volume catalogues dialogues directly on disk
+    # try:
+    #     requests.post("http://frontend:5050/dialogue", json={"dialogue": dialogue}, timeout=2)
+    # except Exception:
+    #     pass
         
     # Send Premium Rich Embed to Discord
     if WEBHOOK:
