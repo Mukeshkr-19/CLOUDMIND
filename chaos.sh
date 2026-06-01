@@ -16,9 +16,16 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Ports
-declare -A PORTS
-PORTS=( ["frontend"]=5050 ["api"]=5051 ["database"]=5052 ["cache"]=5053 ["auth"]=5054 )
+# Ports resolver (macOS Bash 3.2+ compatible)
+get_port() {
+    case "$1" in
+        "frontend") echo 5050 ;;
+        "api") echo 5051 ;;
+        "database") echo 5052 ;;
+        "cache") echo 5053 ;;
+        "auth") echo 5054 ;;
+    esac
+}
 
 header() {
     clear
@@ -29,7 +36,7 @@ header() {
 
 trigger_stress() {
     local service=$1
-    local port=${PORTS[$service]}
+    local port=$(get_port "$service")
     echo -e "\n${RED}[🔥] Injecting chaos into $service (Port $port)...${NC}"
     curl -s -X POST "http://localhost:$port/stress" | json_pp 2>/dev/null || curl -s "http://localhost:$port/stress"
     echo -e "\n${GREEN}[✓] Outage successfully initiated. Monitoring telemetry...${NC}"
@@ -38,7 +45,7 @@ trigger_stress() {
 
 trigger_heal() {
     local service=$1
-    local port=${PORTS[$service]}
+    local port=$(get_port "$service")
     echo -e "\n${GREEN}[🩹] Injecting manual remediation into $service (Port $port)...${NC}"
     curl -s -X POST "http://localhost:$port/heal" | json_pp 2>/dev/null || curl -s "http://localhost:$port/heal"
     echo -e "\n${GREEN}[✓] Heal signal successfully sent.${NC}"
