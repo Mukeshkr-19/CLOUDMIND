@@ -2,11 +2,11 @@
 
 > **"What if your cloud infrastructure could talk in character while it diagnoses and heals itself?"**
 
-CloudMind is a creative **Dialogic Telemetry & Closed-Loop SRE Auto-Remediation demo** inspired by the movie *Inside Out*. Instead of staring at silent dashboards and dry alerts, CloudMind maps five microservices to distinct character voices that discuss outages in real time while an InfraMirror watcher monitors metrics and optionally restarts unhealthy containers.
+CloudMind is a creative **Dialogic Telemetry & Closed-Loop SRE Auto-Remediation Platform** inspired by the movie *Inside Out*. Instead of staring at silent dashboards and dry alerts, CloudMind maps five microservices to distinct character voices that discuss outages in real time while an InfraMirror watcher monitors metrics and optionally restarts unhealthy containers.
 
-This project is built as a polished local portfolio showcase for **Docker orchestration, Flask microservices, Prometheus metrics, Grafana provisioning, webhook-driven incident handling, shared-volume state, and AI-assisted infrastructure storytelling**.
+CloudMind brings together **Docker orchestration, Flask microservices, Prometheus metrics, Grafana provisioning, webhook-driven incident handling, shared-volume state, and AI-assisted infrastructure storytelling** into one cohesive SRE observability system.
 
-> **Note:** CloudMind is a local demo, not hardened production infrastructure. Its auto-remediation intentionally mounts the local Docker socket so the watcher can restart demo containers.
+> **Note:** CloudMind is designed for controlled development and lab environments. Its auto-remediation intentionally mounts the Docker socket so the watcher can restart managed CloudMind containers.
 
 ---
 
@@ -25,7 +25,7 @@ This project is built as a polished local portfolio showcase for **Docker orches
 
 ## 🛠️ System Architecture
 
-CloudMind runs as an orchestrated multi-container cluster inside a local Docker network:
+CloudMind runs as an orchestrated multi-container cluster inside a Docker network:
 
 ```mermaid
 graph TD
@@ -51,7 +51,7 @@ graph TD
 
 1. **Core Microservices (`microservices/`)**: Five lightweight Flask services expose `/status`, `/load`, `/incident`, `/stress`, `/heal`, and `/metrics`.
 2. **Telemetry Layer (`prometheus/`)**: Prometheus scrapes every service and exposes queryable health signals.
-3. **SRE AI Watcher (`inframirror/`)**: InfraMirror watches Prometheus, receives `/whisper` webhooks, generates character dialogue, and performs local container remediation.
+3. **SRE AI Watcher (`inframirror/`)**: InfraMirror watches Prometheus, receives `/whisper` webhooks, generates character dialogue, and performs container remediation.
 4. **Persistent Dialogue Feed**: Incident conversations are written to `shared-data/dialogues.json`, so the dashboard can display recent system conversations even after restarts.
 5. **Dashboard Experience**: The Frontend at `http://localhost:5050` shows service health, stress controls, and the Inside-Cloud dialogue console.
 
@@ -64,9 +64,9 @@ graph TD
 CloudMind demonstrates the difference between scaling and healing:
 
 - **Horizontal Scaling Simulation:** As CPU rises, the dashboard can show active replicas scaling from `1 Pod` toward `3 Pods`.
-- **Auto-Remediation:** When a service crosses the critical threshold, InfraMirror can generate an incident dialogue and restart the affected demo container.
+- **Auto-Remediation:** When a service crosses the critical threshold, InfraMirror can generate an incident dialogue and restart the affected container.
 
-This is intentionally local and visual, but the pattern mirrors real SRE thinking: detect, explain, act, and preserve incident context.
+The pattern mirrors real SRE thinking: detect, explain, act, and preserve incident context.
 
 ### 2. State Persistence Across Restarts
 
@@ -74,7 +74,7 @@ Container memory disappears on restart, so CloudMind writes dialogue history int
 
 ### 3. AI-Optional Dialogue Engine
 
-CloudMind works without external APIs by using local fallback dialogue scripts. If a Gemini key is provided, InfraMirror attempts live AI-generated dialogue and falls back safely if the call fails.
+CloudMind works without external APIs by using built-in fallback dialogue scripts. If a Gemini key is provided, InfraMirror attempts live AI-generated dialogue and falls back safely if the call fails.
 
 ---
 
@@ -83,7 +83,7 @@ CloudMind works without external APIs by using local fallback dialogue scripts. 
 ### Prerequisites
 
 - Docker Desktop running.
-- Python 3.x for local tests.
+- Python 3.x for tests.
 
 ### 1. Launch the Cluster
 
@@ -186,7 +186,7 @@ Restart the stack:
 docker compose up -d --build
 ```
 
-Keep `.env` local. Never commit real secrets.
+Keep `.env` private. Never commit real secrets.
 
 ---
 
@@ -207,10 +207,10 @@ Keep `.env` local. Never commit real secrets.
 
 ## 🔐 Security Notes
 
-- `inframirror` mounts `/var/run/docker.sock`; this is powerful and should stay local.
+- `inframirror` mounts `/var/run/docker.sock`; this is powerful and should be used only in controlled environments.
 - `.env` is ignored by Git and should contain secrets only on your machine.
 - If a token or API key is exposed, revoke and rotate it immediately.
-- Grafana uses demo credentials (`admin` / `admin`) for local presentation only.
+- Grafana uses default development credentials (`admin` / `admin`).
 
 ---
 
@@ -224,4 +224,4 @@ CloudMind is not just another metrics dashboard. It turns infrastructure behavio
 - The watcher can act.
 - The dashboard keeps the incident memory.
 
-That combination makes CloudMind a memorable SRE portfolio project: technical enough to prove systems skill, playful enough that people actually remember it.
+That combination makes CloudMind a distinctive SRE observability platform: technical enough to show real systems engineering depth, and memorable enough that people remember how it works.
