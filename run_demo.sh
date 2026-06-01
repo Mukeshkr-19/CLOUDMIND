@@ -12,6 +12,15 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+if docker compose version &>/dev/null; then
+    COMPOSE_CMD=(docker compose)
+elif command -v docker-compose &>/dev/null; then
+    COMPOSE_CMD=(docker-compose)
+else
+    echo -e "${RED}[x] Docker Compose is not installed or not available on PATH.${NC}"
+    exit 1
+fi
+
 clear
 echo -e "${PURPLE}=========================================================================${NC}"
 echo -e "${CYAN}             🧠 CLOUDMIND: EMOTIONAL Observability Stack Launcher 🧠        ${NC}"
@@ -27,7 +36,7 @@ echo -e "${GREEN}[✓] Docker daemon is online.${NC}"
 
 # 2. Compile and Syntax Validate Code
 echo -e "\n${YELLOW}[🔎] Running automated Python syntax checks...${NC}"
-python3 -m compileall microservices inframirror &>/dev/null
+python3 -m compileall microservices inframirror tests &>/dev/null
 if [ $? -ne 0 ]; then
     echo -e "${RED}[❌] Python compilation check failed. Please check syntax errors.${NC}"
     exit 1
@@ -36,7 +45,7 @@ echo -e "${GREEN}[✓] Python syntax compilation check passed.${NC}"
 
 # 3. Validate Docker Compose config
 echo -e "\n${YELLOW}[🔎] Validating Docker Compose configuration...${NC}"
-docker-compose config &>/dev/null
+"${COMPOSE_CMD[@]}" config --quiet
 if [ $? -ne 0 ]; then
     echo -e "${RED}[❌] docker-compose configuration check failed!${NC}"
     exit 1
@@ -45,8 +54,8 @@ echo -e "${GREEN}[✓] Docker Compose configuration is valid.${NC}"
 
 # 4. Stop existing containers and clean rebuild
 echo -e "\n${RED}[🩹] Stopping old container threads and executing clean rebuild...${NC}"
-docker-compose down --remove-orphans
-docker-compose up -d --build
+"${COMPOSE_CMD[@]}" down --remove-orphans
+"${COMPOSE_CMD[@]}" up -d --build
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}[❌] Docker Compose up failed!${NC}"

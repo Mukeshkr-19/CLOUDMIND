@@ -52,10 +52,21 @@ class TestSREWatcherAndEngine(unittest.TestCase):
 
     def test_trigger_healthy_dialogue_local(self):
         # Trigger ambient dialogue (should fall back to local scripts successfully)
-        dialogue = llm_engine.trigger_healthy_dialogue()
+        dialogue = llm_engine.trigger_healthy_dialogue(persist=False)
         self.assertTrue(len(dialogue) > 0)
         lines = [line for line in dialogue.split('\n') if line.strip()]
         self.assertEqual(len(lines), 5)
+
+    def test_public_generators_accept_explicit_key_without_persisting(self):
+        dialogue = llm_engine.generate_incident_dialogue(
+            "database",
+            91.2,
+            401,
+            gemini_key="",
+            persist=False,
+        )
+        self.assertIn("Memory - Database", dialogue)
+        self.assertIn("InfraMirror - SRE", dialogue)
 
 if __name__ == '__main__':
     unittest.main()

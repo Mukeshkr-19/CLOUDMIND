@@ -1,9 +1,10 @@
 # llm_engine.py – AI Cloud Brain Dialogue Engine & Prompt Orchestration
-import os, time, requests, json, random
+import os, requests, json, random
 from datetime import datetime, timedelta, timezone
 
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 WEBHOOK = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
+SHARED_DATA_DIR = os.getenv("SHARED_DATA_DIR", "/app/shared")
 
 def _send_discord_embed(payload: dict):
     if not WEBHOOK:
@@ -13,11 +14,12 @@ def _send_discord_embed(payload: dict):
     except Exception as e:
         print(f"[❌] Discord Webhook error: {e}")
 
-def _call_gemini(prompt: str) -> str:
-    if not GEMINI_KEY:
+def _call_gemini(prompt: str, gemini_key: str = None) -> str:
+    key = (gemini_key if gemini_key is not None else GEMINI_KEY).strip()
+    if not key:
         return ""
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
         headers = {"Content-Type": "application/json"}
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
@@ -141,7 +143,7 @@ def _generate_healthy_fallback_dialogue() -> str:
     return "\n".join(selected)
 
 def _save_dialogue_to_volume(dialogue: str):
-    shared_dir = "/app/shared"
+    shared_dir = SHARED_DATA_DIR
     if not os.path.exists(shared_dir):
         try:
             os.makedirs(shared_dir, exist_ok=True)
@@ -171,7 +173,7 @@ def _save_dialogue_to_volume(dialogue: str):
     except Exception as e:
         print(f"[❌] Failed to write dialogues.json: {e}")
 
-def trigger_healthy_dialogue() -> str:
+def trigger_healthy_dialogue(gemini_key: str = None, persist: bool = True) -> str:
     """Generates peaceful, character-driven ambient conversation when cluster is healthy."""
     print("\n" + "="*50)
     print("🌸 [AMBIENT CLOUD] CLUSTER IS HEALTHY & STABLE 🌸")
@@ -202,9 +204,10 @@ def trigger_healthy_dialogue() -> str:
     """
     
     dialogue = ""
-    if GEMINI_KEY:
+    key = (gemini_key if gemini_key is not None else GEMINI_KEY).strip()
+    if key:
         print("[LLM] Generating healthy ambient dialogue using Gemini...")
-        dialogue = _call_gemini(gemini_prompt)
+        dialogue = _call_gemini(gemini_prompt, key)
         
     if not dialogue:
         print("[Local Engine] Generating healthy dialogue from predefined scripts...")
@@ -213,10 +216,11 @@ def trigger_healthy_dialogue() -> str:
     print(dialogue)
     print("="*50 + "\n")
     
-    _save_dialogue_to_volume(dialogue)
+    if persist:
+        _save_dialogue_to_volume(dialogue)
     return dialogue
 
-def trigger_incident_dialogue(service: str, cpu: float, latency: float) -> str:
+def trigger_incident_dialogue(service: str, cpu: float, latency: float, gemini_key: str = None, persist: bool = True) -> str:
     """Generates incident dialogue and sends dynamic rich Embeds to Discord."""
     print("\n" + "="*50)
     print(f"🎬 [INSIDE CLOUD] INCIDENT DETECTED ON SERVICE: {service.upper()} 🎬")
@@ -247,9 +251,10 @@ def trigger_incident_dialogue(service: str, cpu: float, latency: float) -> str:
     """
     
     dialogue = ""
-    if GEMINI_KEY:
+    key = (gemini_key if gemini_key is not None else GEMINI_KEY).strip()
+    if key:
         print("[LLM] Generating dialogue using Gemini...")
-        dialogue = _call_gemini(gemini_prompt)
+        dialogue = _call_gemini(gemini_prompt, key)
         
     if not dialogue:
         print("[Local Engine] Generating dialogue from predefined scripts...")
@@ -269,7 +274,8 @@ def trigger_incident_dialogue(service: str, cpu: float, latency: float) -> str:
         
     print(dialogue)
     print("="*50 + "\n")
-    _save_dialogue_to_volume(dialogue)
+    if persist:
+        _save_dialogue_to_volume(dialogue)
         
     # Send Premium Rich Embed to Discord
     if WEBHOOK:
@@ -303,8 +309,8 @@ def trigger_incident_dialogue(service: str, cpu: float, latency: float) -> str:
         _send_discord_embed(payload)
     return dialogue
 
-def generate_healthy_dialogue(gemini_key: str = None) -> str:
-    return trigger_healthy_dialogue()
+def generate_healthy_dialogue(gemini_key: str = None, persist: bool = True) -> str:
+    return trigger_healthy_dialogue(gemini_key=gemini_key, persist=persist)
 
-def generate_incident_dialogue(service: str, cpu: float, latency: float, gemini_key: str = None) -> str:
-    return trigger_incident_dialogue(service, cpu, latency)
+def generate_incident_dialogue(service: str, cpu: float, latency: float, gemini_key: str = None, persist: bool = True) -> str:
+    return trigger_incident_dialogue(service, cpu, latency, gemini_key=gemini_key, persist=persist)

@@ -1,103 +1,130 @@
-# 🧠 CloudMind — Inside the Cloud
+# CloudMind
 
-> **"What if your cloud infrastructure could talk in character to tell the story of a system outage?"**
+CloudMind is a local Docker demo that turns microservice telemetry into character-driven incident dialogue. Five Flask services expose health, load, incident, stress, heal, and Prometheus metrics endpoints. Prometheus watches them, Grafana is provisioned for dashboards/alerting, and the InfraMirror watcher generates dialogue plus optional container restarts.
 
-CloudMind is a highly creative, production-grade **Dialogic Telemetry & Closed-Loop SRE Auto-Remediation platform** inspired by the movie *Inside Out*. Instead of engineers scrolling through dry, overwhelming alerts, CloudMind maps key microservices to distinct emotional characters who actively discuss system incidents in real time, and leverages an automated SRE engine to heal them.
+This is an SRE/observability portfolio project, not a production platform. The remediation is intentionally local and demo-oriented: InfraMirror mounts the Docker socket so it can restart CloudMind containers when `HEALING_ENABLED=true`.
 
-This project is a comprehensive full-stack systems engineering showcase proving capabilities in **container orchestration, time-series metrics collection, closed-loop automation, shared volume state management, and custom telemetry dashboard designs.**
-
----
-
-## 🎭 The Infrastructure Emotion Matrix
-
-| Microservice | Emotion | Character Voice | Behavior Profile |
-| :--- | :---: | :---: | :--- |
-| **🖥️ Frontend** | Joy 😄 | Positive & Energetic | Hates lag, strives for perfect sub-100ms response rates. |
-| **🧠 API Gateway** | Logic 🧠 | Technical & Impatient | Easily frustrated by downstream database delays. |
-| **📚 Database** | Memory 📚 | Cautious & Nervous | Panics under heavy write locks or high indexing loads. |
-| **⚡ Redis Cache** | Swift ⚡ | Hyper-Active & Fast | Evicts keys at lightning speed, gets exhausted under high misses. |
-| **🔒 Auth Manager** | Gatekeeper 🔒 | Snarky & Sarcastic | Highly paranoid, rejects requests under token verification spikes. |
-
----
-
-## 🛠️ System Architecture
-
-CloudMind runs as an orchestrated multi-container cluster inside a local Docker network:
+## Architecture
 
 ```mermaid
 graph TD
-    Client[Browser Dashboard] -->|CORS API / AJAX| FE[Frontend / Joy]
-    Client -->|Chaos Trigger /stress| FE
-    Client -->|Chaos Trigger /stress| API[API Gateway / Logic]
-    Client -->|Chaos Trigger /stress| DB[Database / Memory]
-    Client -->|Chaos Trigger /stress| Cache[Cache / Swift]
-    Client -->|Chaos Trigger /stress| Auth[Auth / Gatekeeper]
-    
-    FE -.->|Exposes /metrics| Prom[Prometheus TSDB]
-    API -.->|Exposes /metrics| Prom
-    DB -.->|Exposes /metrics| Prom
-    Cache -.->|Exposes /metrics| Prom
-    Auth -.->|Exposes /metrics| Prom
-    
-    Watcher[InfraMirror SRE Watcher] -->|Scrapes Metrics| Prom
-    Watcher -->|Interacts with /var/run/docker.sock| HostDaemon[Docker Host Daemon]
-    Watcher -->|Writes Incident logs| Vol[(Shared Volume dialogues.json)]
-    FE -->|Reads dialogues| Vol
+    Browser["Browser dashboard"] --> Frontend["frontend:5050"]
+    Browser --> API["api:5051"]
+    Browser --> DB["database:5052"]
+    Browser --> Cache["cache:5053"]
+    Browser --> Auth["auth:5054"]
+
+    Frontend --> Shared["shared-data/dialogues.json"]
+    InfraMirror["inframirror:5055 /whisper"] --> Shared
+    InfraMirror --> Docker["Docker socket"]
+
+    Frontend --> Prometheus["prometheus:9090"]
+    API --> Prometheus
+    DB --> Prometheus
+    Cache --> Prometheus
+    Auth --> Prometheus
+    Grafana["grafana:3000"] --> Prometheus
+    InfraMirror --> Prometheus
 ```
 
-1. **The Core Microservices (`microservices/`):** Five lightweight Flask APIs tracking local CPU metrics and response latencies using `psutil`.
-2. **Observability Database (`prometheus/`):** A Prometheus TSDB polling `/metrics` from all containers every 5 seconds.
-3. **The SRE AI Whisperer (`inframirror/`):** An independent watcher container that mounts `/var/run/docker.sock` and a shared Docker Volume (`shared-data`).
-4. **Interactive Dashboard:** A custom-coded glassmorphic UI served by the Frontend on port `5050` displaying live metrics, animated LED health dots, a simulated scaling module, and a real-time log of the Inside-Cloud conversations.
+## Services
 
----
+| Service | Port | Persona | Main endpoints |
+| --- | ---: | --- | --- |
+| `frontend` | `5050` | Joy | `/`, `/status`, `/load`, `/incident`, `/stress`, `/heal`, `/metrics`, `/dialogues` |
+| `api` | `5051` | Logic | `/status`, `/load`, `/incident`, `/stress`, `/heal`, `/metrics` |
+| `database` | `5052` | Memory | `/status`, `/load`, `/incident`, `/stress`, `/heal`, `/metrics` |
+| `cache` | `5053` | Swift | `/status`, `/load`, `/incident`, `/stress`, `/heal`, `/metrics` |
+| `auth` | `5054` | Gatekeeper | `/status`, `/load`, `/incident`, `/stress`, `/heal`, `/metrics` |
+| `inframirror` | `5055` | SRE watcher | `/whisper` |
+| `prometheus` | `9090` | Metrics store | Prometheus UI |
+| `grafana` | `3000` | Dashboard | `admin` / `admin` |
 
-## 🚀 SRE Core Concepts Demonstrated
+## Quick Start
 
-### 1. Auto-Remediation (Self-Healing) vs. Horizontal Scaling
-A key architectural principle in SRE is recognizing when to **Scale Out** versus when to **Remediate (Reboot)**:
-* **Horizontal Scaling (HPA):** If a service experiences high legitimate user traffic, scaling out (spinning up additional replicas) distributes the load. CloudMind simulates this on the dashboard—as CPU load rises, active replicas scale dynamically from `1 Pod` to `3 Pods`.
-* **Auto-Remediation (Auto-Healing):** If a container hangs, encounters a process-level deadlock, or leaks memory, scaling up will not fix the issue. The SRE Watcher must intervene to isolate and **restart the corrupted container**. In CloudMind, once CPU load crosses the **85% Critical Threshold** (simulated via `/stress`), the watcher triggers the dialogic incident report and reboots the container, restoring health back to `0.0% CPU / 1 Pod` within a fraction of a second.
+Start Docker Desktop first, then run:
 
-### 2. State Persistence across Restarts (Docker Volumes)
-Because restarting a container wipes its local memory, the watcher writes incident dialogues to a shared volume path `/app/shared/dialogues.json`. When the Frontend container is killed and restarted, it comes back online and immediately reads from this persistent file—ensuring that **diagnostic incident logs are never lost during remediation**.
-
----
-
-## ⚡ Quick Start
-
-### Prerequisites
-* Mac with **Docker Desktop** running.
-* Python 3.x (optional, for testing scripts).
-
-### 1. Launch the Cluster
-Rebuild and spin up the multi-container environment:
 ```bash
-docker-compose up -d --build
+./run_demo.sh
 ```
 
-### 2. Access the Interfaces
-* **CloudMind Dashboard:** [http://localhost:5050](http://localhost:5050)
-* **Prometheus Console:** [http://localhost:9090](http://localhost:9090)
-* **Grafana Panel:** [http://localhost:3000](http://localhost:3000) (Admin: `admin` / Password: `admin`)
+Open:
 
----
+- Dashboard: http://localhost:5050
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000
+- InfraMirror webhook: http://localhost:5055/whisper
 
-## 🧪 Injecting Chaos & Witnessing Self-Healing
+To stop the demo:
 
-1. Navigate to your dashboard at [http://localhost:5050](http://localhost:5050).
-2. Click **"Stress"** on **Frontend (Joy)** or **Database (Memory)**.
-3. **Observe the Telemetry:**
-   * The LED indicator turns from Green ➡️ Yellow ➡️ Red.
-   * CPU rises, latency spikes, and the simulated replicas autoscaler scales to **`3 Pods`**.
-4. **Read the Dialogues:** Watch the *Inside-Cloud Whispers* console. You will see a newly generated, randomized, character-accurate script scroll onto the feed detailing the incident (e.g. Logic complaining that Database is locking indices, Gatekeeper telling Frontend to hold login requests).
-5. **Watch the Recovery:** Within 5-10 seconds, the monitor triggers remediation. The affected card displays **`HEALING...`** and reboots, returning instantly to a healthy **`1 Pod / 0.0% CPU`** green state!
+```bash
+docker compose down
+```
 
----
+If your machine only has the legacy Compose binary, use `docker-compose down`.
 
-## 🤖 Activating Real AI Dialogue Generation (Optional)
-CloudMind supports live Gemini LLM integrations. To generate organic, metric-contextual scripts during outages:
-1. Retrieve a free Gemini API Key from [Google AI Studio](https://aistudio.google.com/).
-2. Copy the template: `cp .env.example .env`
-3. Add your key: `GEMINI_API_KEY=your_key_here`
-4. Restart the watcher: `docker-compose up -d --build inframirror`
+## Local Tests
+
+Create a virtual environment and run the unit suite:
+
+```bash
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+venv/bin/python -m unittest discover -s tests
+python3 -m compileall microservices inframirror tests
+docker compose config --quiet
+```
+
+The tests cover the five Flask services and the dialogue engine fallback path. Docker smoke testing is still separate because it needs Docker Desktop and local ports.
+
+## Manual Smoke Checks
+
+After `./run_demo.sh`:
+
+```bash
+curl http://localhost:5050/status
+curl http://localhost:5051/load
+curl http://localhost:5052/incident
+curl -X POST http://localhost:5055/whisper \
+  -H 'Content-Type: application/json' \
+  -d '{"service":"database","cpu":91.2,"latency":401}'
+```
+
+The `/whisper` endpoint returns `202 Accepted` quickly and performs dialogue generation plus healing in a background thread.
+
+## Optional AI and Discord
+
+CloudMind works without external credentials by using local fallback dialogue scripts.
+
+To enable Gemini-generated dialogue or Discord embeds:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env`:
+
+```bash
+GEMINI_API_KEY=your_gemini_key
+DISCORD_WEBHOOK_URL=your_discord_webhook
+```
+
+Keep `.env` local. Do not commit real secrets.
+
+## Files
+
+- `microservices/*/service.py`: Flask services and Prometheus metrics.
+- `inframirror/watcher.py`: Prometheus polling, `/whisper`, cooldown logic, and Docker restart behavior.
+- `inframirror/llm_engine.py`: Gemini prompt orchestration, local fallbacks, dialogue persistence, and Discord embed formatting.
+- `prometheus/prometheus.yml`: scrape config.
+- `prometheus/alerts.yml`: alert rules.
+- `grafana/provisioning/`: provisioned Grafana datasource, dashboards, and alerts.
+- `tests/`: unit tests.
+- `run_demo.sh`: one-command local launcher.
+- `chaos.sh`: interactive stress/heal script.
+
+## Security Notes
+
+- `inframirror` mounts `/var/run/docker.sock`, which is powerful. Use this only in a local demo environment.
+- Compose reads `GEMINI_API_KEY` and `DISCORD_WEBHOOK_URL` from your shell or `.env`; keep real values out of Git.
+- If credentials are exposed, rotate them immediately and rebuild the stack.

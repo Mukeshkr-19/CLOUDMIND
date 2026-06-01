@@ -138,7 +138,7 @@ def _diagnose(service: str):
             print(f"[⏳] Healing cooldown active for {service} (skipping dialogue and action)")
             return
             
-        llm_engine.generate_incident_dialogue(service, cpu_v, lat_v)
+        llm_engine.generate_incident_dialogue(service, cpu_v, lat_v, gemini_key=GEMINI_KEY)
         
         if HEALING:
             success = _maybe_heal(service, reason)
@@ -195,7 +195,7 @@ def watch():
             
             # If healthy, and 25 seconds have elapsed since the last dialogue
             if not has_active_outage and (time.time() - last_ambient_time) >= 25:
-                llm_engine.generate_healthy_dialogue()
+                llm_engine.generate_healthy_dialogue(gemini_key=GEMINI_KEY)
                 last_ambient_time = time.time()
         except Exception as e:
             print(f"[⚠️] Ambient check failed: {e}")
@@ -208,14 +208,17 @@ app = Flask(__name__)
 @app.route("/whisper", methods=["POST"])
 def receive_whisper_alert():
     """Receives Prometheus alert webhook callbacks and triggers AI remediation."""
-    data = request.json
+    data = request.get_json(silent=True) or {}
     print(f"\n[🚨 Alert Webhook] Received telemetry alert: {json.dumps(data)}")
     
     # Extract service and telemetry from alert data
     # Standard format: {"service": "database", "cpu": 92.4, "latency": 380}
     service = data.get("service")
-    cpu = float(data.get("cpu", 86.0))
-    latency = float(data.get("latency", 380.0))
+    try:
+        cpu = float(data.get("cpu", 86.0))
+        latency = float(data.get("latency", 380.0))
+    except (TypeError, ValueError):
+        return jsonify({"status": "ignored", "reason": "invalid cpu or latency"}), 400
     
     if not service or service not in SERVICES:
         # Fallback parsing for Prometheus Alertmanager format
@@ -226,22 +229,31 @@ def receive_whisper_alert():
         
     if service and service in SERVICES:
         print(f"[🤖 AI Engine] Processing webhook alert for service: {service.upper()}...")
-        # Trigger incident dialogue
-        llm_engine.trigger_incident_dialogue(service, cpu, latency)
-        
-        # Trigger healing action if enabled
-        now = datetime.now(timezone.utc)
-        last = _last_heal.get(service)
-        if not last or (now - last) >= timedelta(seconds=COOLDOWN_SEC):
-            if HEALING:
-                success = _maybe_heal(service, f"Webhook Alert: CPU={cpu}% Latency={latency}ms")
-                if success:
-                    _last_heal[service] = now
-            else:
-                print(f"[💊] Webhook Healing simulated for {service}")
-            return jsonify({"status": "processed", "service": service, "remediation": "executed" if HEALING else "simulated"})
+        threading.Thread(
+            target=_process_whisper_alert,
+            args=(service, cpu, latency),
+            daemon=True,
+        ).start()
+        return jsonify({"status": "accepted", "service": service, "remediation": "queued"}), 202
             
     return jsonify({"status": "ignored", "reason": "invalid service or cooldown active"})
+
+def _process_whisper_alert(service: str, cpu: float, latency: float):
+    """Runs slower dialogue + healing work away from the webhook response path."""
+    llm_engine.trigger_incident_dialogue(service, cpu, latency, gemini_key=GEMINI_KEY)
+
+    now = datetime.now(timezone.utc)
+    last = _last_heal.get(service)
+    if last and (now - last) < timedelta(seconds=COOLDOWN_SEC):
+        print(f"[⏳] Webhook healing cooldown active for {service}")
+        return
+
+    if HEALING:
+        success = _maybe_heal(service, f"Webhook Alert: CPU={cpu}% Latency={latency}ms")
+        if success:
+            _last_heal[service] = now
+    else:
+        print(f"[💊] Webhook Healing simulated for {service}")
 
 def run_webhook_server():
     print("🚀 Exposing /whisper Webhook receiver on port 5055...")
