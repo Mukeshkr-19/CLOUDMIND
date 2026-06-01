@@ -88,10 +88,10 @@ CloudMind works without external APIs by using local fallback dialogue scripts. 
 ### 1. Launch the Cluster
 
 ```bash
-./run_demo.sh
+docker compose up -d --build
 ```
 
-The launcher validates Python syntax, checks Docker Compose, rebuilds the services, and prints the service map.
+This rebuilds the services and starts the full CloudMind stack in the background.
 
 ### 2. Access the Interfaces
 
@@ -183,7 +183,7 @@ DISCORD_WEBHOOK_URL=your_discord_webhook
 Restart the stack:
 
 ```bash
-./run_demo.sh
+docker compose up -d --build
 ```
 
 Keep `.env` local. Never commit real secrets.
@@ -201,9 +201,7 @@ Keep `.env` local. Never commit real secrets.
 | `prometheus/alerts.yml` | Alert rule definitions |
 | `grafana/provisioning/` | Provisioned Grafana dashboards, datasource, and alerting config |
 | `tests/` | Unit tests for services and watcher dialogue behavior |
-| `run_demo.sh` | One-command launcher |
 | `chaos.sh` | Interactive chaos and healing script |
-| `walkthrough.md` | Demo walkthrough and verification guide |
 
 ---
 

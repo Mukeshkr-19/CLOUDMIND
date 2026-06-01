@@ -25,8 +25,11 @@ Microservices-based AI SRE system with multiple independent services.
 
 ## Commands
 ```bash
-# Start the entire cluster in a single command
-./run_demo.sh
+# Start the entire cluster
+docker compose up -d --build
+
+# Stop the cluster
+docker compose down
 
 # Run local unit tests
 venv/bin/python -m unittest discover -s tests
