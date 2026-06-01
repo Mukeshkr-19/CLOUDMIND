@@ -1,0 +1,31 @@
+global:
+  scrape_interval: 5s
+
+rule_files:
+  - "/etc/prometheus/alerts.yml"
+
+scrape_configs:
+  - job_name: 'frontend'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['frontend:5050']
+
+  - job_name: 'api'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['api:5051']
+
+  - job_name: 'database'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['database:5052']
+
+  - job_name: 'cache'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['cache:5053']
+
+  - job_name: 'auth'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['auth:5054']

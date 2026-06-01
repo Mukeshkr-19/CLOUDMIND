@@ -1,0 +1,83 @@
+services:
+  frontend:
+    build: ./microservices/frontend
+    ports:
+      - "5050:5050"
+    volumes:
+      - shared-data:/app/shared
+
+  api:
+    build: ./microservices/api
+    ports:
+      - "5051:5051"
+
+  database:
+    build: ./microservices/database
+    ports:
+      - "5052:5052"
+
+  cache:
+    build: ./microservices/cache
+    ports:
+      - "5053:5053"
+
+  auth:
+    build: ./microservices/auth
+    ports:
+      - "5054:5054"
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cloudmind-grafana-1
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-https://discord.com/api/webhooks/placeholder}
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+
+  inframirror:
+    build:
+      context: ./inframirror
+      dockerfile: Dockerfile
+    image: cloudmind-inframirror:latest
+    container_name: cloudmind-inframirror-1
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - api
+      - database
+      - cache
+      - auth
+      - prometheus
+    environment:
+      PROM_URL: "http://prometheus:9090"
+      HEALING_ENABLED: "true"
+      CPU_SOFT_THRESHOLD: "70"
+      CPU_HARD_THRESHOLD: "85"
+      LAT_WARN_MS: "250"
+      LAT_PAIN_MS: "350"
+      HEALING_COOLDOWN_SEC: "150"
+      GEMINI_API_KEY: "${GEMINI_API_KEY}"
+      DISCORD_WEBHOOK_URL: "${DISCORD_WEBHOOK_URL}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - shared-data:/app/shared
+
+volumes:
+  grafana-storage:
+  shared-data:

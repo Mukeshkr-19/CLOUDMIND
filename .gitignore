@@ -1,0 +1,37 @@
+# =========================================================================
+# CloudMind — Git Ignore Patterns
+# =========================================================================
+
+# Environment variables & secrets (CRITICAL: Never commit to Git!)
+.env
+.env.local
+.env.production
+.env.development
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+.poetry/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docker & Volume Cache
+*.log
+.docker/
+
+# IDEs & Text Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

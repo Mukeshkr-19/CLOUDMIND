@@ -1,0 +1,32 @@
+groups:
+  - name: cloudmind-alerts
+    rules:
+      # Alert if a service is down / unreachable
+      - alert: ServiceDown
+        expr: up == 0
+        for: 5s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Microservice down: {{ $labels.instance }}"
+          description: "Service is unresponsive and cannot be scraped by Prometheus."
+
+      # Alert if a service CPU load is critical (crosses 85%)
+      - alert: CriticalCPULoad
+        expr: service_cpu_percent >= 85
+        for: 5s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Stressed CPU on: {{ $labels.service }}"
+          description: "CPU load on service '{{ $labels.service }}' has exceeded 85%."
+
+      # Alert if response latency is high (exceeds 300ms)
+      - alert: HighResponseLatency
+        expr: service_latency_ms >= 300
+        for: 5s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated latency on: {{ $labels.service }}"
+          description: "Latency has spiked to {{ $value }}ms on '{{ $labels.service }}'."
