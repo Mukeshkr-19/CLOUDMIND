@@ -1,6 +1,8 @@
 from flask import Flask, jsonify
-from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST, CollectorRegistry
 import psutil, random, threading, time
+
+registry = CollectorRegistry()
 
 app = Flask(__name__)
 
@@ -12,9 +14,9 @@ def after_request(response):
     return response
 
 # Prometheus metrics
-REQUEST_COUNT = Counter('service_requests_total', 'Total number of requests', ['service'])
-CPU_USAGE = Gauge('service_cpu_percent', 'CPU usage percent', ['service'])
-LATENCY = Gauge('service_latency_ms', 'Response latency in milliseconds', ['service'])
+REQUEST_COUNT = Counter('service_requests_total', 'Total number of requests', ['service'], registry=registry)
+CPU_USAGE = Gauge('service_cpu_percent', 'CPU usage percent', ['service'], registry=registry)
+LATENCY = Gauge('service_latency_ms', 'Response latency in milliseconds', ['service'], registry=registry)
 
 SERVICE_NAME = "auth"
 
@@ -104,7 +106,7 @@ def metrics():
         latency = random.randint(300, 450)
     LATENCY.labels(service=SERVICE_NAME).set(latency)
     
-    return generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
+    return generate_latest(registry), 200, {'Content-Type': CONTENT_TYPE_LATEST}
 
 @app.route("/stress", methods=["GET", "POST"])
 def trigger_stress():
@@ -124,6 +126,30 @@ def trigger_heal():
     stress_latency_min = 0
     stress_latency_max = 0
     return jsonify({"status": "healed", "service": SERVICE_NAME, "message": "Resilience restored. CPU returning to normal."})
+
+@app.route("/load")
+def load_status():
+    cpu = psutil.cpu_percent(interval=0.05)
+    if is_stressed and cpu < 80:
+        cpu = random.uniform(85.0, 96.0)
+    latency = random.randint(40, 180)
+    if is_stressed:
+        latency = random.randint(300, 450)
+    return jsonify({
+        "service": SERVICE_NAME,
+        "load_cpu_percent": cpu,
+        "load_latency_ms": latency,
+        "status": "high" if is_stressed else "normal"
+    })
+
+@app.route("/incident")
+def incident_status():
+    return jsonify({
+        "service": SERVICE_NAME,
+        "active_incident": is_stressed,
+        "severity": "critical" if is_stressed else "none",
+        "description": "Auth security gate thread exhaustion injected" if is_stressed else "All operations normal"
+    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5054)

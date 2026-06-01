@@ -1,35 +1,37 @@
 # CloudMind - Agent Context
 
 ## Project Overview
-Microservices-based AI system with multiple independent services.
+Microservices-based AI SRE system with multiple independent services.
 
 ## Architecture
 - **microservices/** - Core services (frontend, auth, api, database, cache)
 - **prometheus/** - Monitoring configuration
-- **inframirror/** - Infrastructure mirror/Docker setup
+- **inframirror/** - SRE Watcher daemon & AI Whisper engine
 
 ## Key Files
 - `docker-compose.yml` - Service orchestration
-- `microservices/*/service.py` - Service implementations
-- `microservices/*/Dockerfile` - Service containers
+- `microservices/*/service.py` - Flask service implementations
+- `microservices/*/Dockerfile` - Service container recipes
 
 ## Services
-| Service | Port | Purpose |
-|---------|------|---------|
-| frontend | 8000 | User interface |
-| auth | 8001 | Authentication |
-| api | 8002 | REST API |
-| database | 5432 | PostgreSQL |
-| cache | 6379 | Redis |
+| Service | Port | Purpose | Character Persona |
+|---------|------|---------|-------------------|
+| frontend | 5050 | SRE Visual Dashboard & Dialogue console | Joy |
+| api | 5051 | Backend REST API & Logical gateway | Logic |
+| database | 5052 | Database adapter & Index indexing manager | Memory |
+| cache | 5053 | High-speed cache cluster | Swift |
+| auth | 5054 | Token-based security and authentication | Gatekeeper |
+| SRE watcher | 5055 | Closed-Loop Auto-Remediation & AI Webhook | InfraMirror |
 
 ## Commands
 ```bash
-cd CloudMind && docker-compose up -d
+# Start the entire cluster in a single command
+./run_demo.sh
 ```
 
 ## Stack
-- Python (FastAPI)
-- Docker
-- PostgreSQL
-- Redis
-- Prometheus
+- Python (Flask)
+- Docker & Docker Compose
+- Prometheus (Timeseries scraping)
+- Grafana (Provisioned Alerting-as-Code)
+- Google Gemini API (Dynamic incident dialogs)

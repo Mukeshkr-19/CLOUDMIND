@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
-COPY watcher.py .
-RUN pip install --no-cache-dir requests docker prometheus_client
+COPY *.py ./
+RUN pip install --no-cache-dir requests docker prometheus_client flask
 ENV PYTHONUNBUFFERED=1
 CMD ["python","-u","/app/watcher.py"]

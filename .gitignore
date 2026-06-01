@@ -35,3 +35,6 @@ htmlcov/
 *.swo
 .DS_Store
 Thumbs.db
+
+# Documents & requirements
+*.docx

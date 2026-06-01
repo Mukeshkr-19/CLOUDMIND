@@ -57,6 +57,8 @@ services:
     image: cloudmind-inframirror:latest
     container_name: cloudmind-inframirror-1
     restart: unless-stopped
+    ports:
+      - "5055:5055"
     depends_on:
       - frontend
       - api
