@@ -18,6 +18,8 @@ class TestMicroservices(unittest.TestCase):
         self.cache = cache_app.test_client()
         self.database = database_app.test_client()
         self.frontend = frontend_app.test_client()
+        for client in [self.api, self.auth, self.cache, self.database, self.frontend]:
+            client.post('/heal')
 
     def test_api_endpoints(self):
         # Test status endpoint

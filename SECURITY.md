@@ -67,6 +67,10 @@ docker compose config --quiet
 
 Review dependency updates in `requirements.txt` and Dockerfiles before rebuilding images.
 
+## Grafana Credentials
+
+Grafana defaults to `admin` / `admin` through `.env.example` so a fresh stack can start without manual setup. Override `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` in `.env` before running CloudMind anywhere persistent or shared.
+
 ## Reporting
 
 If you find a security issue in CloudMind, open a private report with:

@@ -43,6 +43,8 @@ graph TD
     Auth -.->|/metrics| Prom
 
     Grafana[Grafana Dashboard + Alerts] --> Prom
+    Prom -->|Alert rules| Alertmanager[Alertmanager]
+    Alertmanager -->|Webhook| Watcher
     Watcher[InfraMirror SRE Watcher] -->|Queries telemetry| Prom
     Watcher -->|/var/run/docker.sock| Docker[Docker Host Daemon]
     Watcher -->|Writes incident history| Vol[(shared-data/dialogues.json)]
@@ -51,9 +53,10 @@ graph TD
 
 1. **Core Microservices (`microservices/`)**: Five lightweight Flask services expose `/status`, `/load`, `/incident`, `/stress`, `/heal`, and `/metrics`.
 2. **Telemetry Layer (`prometheus/`)**: Prometheus scrapes every service and exposes queryable health signals.
-3. **SRE AI Watcher (`inframirror/`)**: InfraMirror watches Prometheus, receives `/whisper` webhooks, generates character dialogue, and performs container remediation.
-4. **Persistent Dialogue Feed**: Incident conversations are written to `shared-data/dialogues.json`, so the dashboard can display recent system conversations even after restarts.
-5. **Dashboard Experience**: The Frontend at `http://127.0.0.1:5050` shows service health, stress controls, and the Inside-Cloud dialogue console.
+3. **Alert Routing (`alertmanager/`)**: Alertmanager receives Prometheus rule events and routes them into InfraMirror's `/whisper` webhook.
+4. **SRE AI Watcher (`inframirror/`)**: InfraMirror watches Prometheus, receives `/whisper` webhooks, generates character dialogue, and performs container remediation.
+5. **Persistent Dialogue Feed**: Incident conversations are written to `shared-data/dialogues.json`, so the dashboard can display recent system conversations even after restarts.
+6. **Dashboard Experience**: The Frontend at `http://127.0.0.1:5050` shows service health, stress controls, and the Inside-Cloud dialogue console.
 
 ---
 
@@ -97,6 +100,7 @@ This rebuilds the services and starts the full CloudMind stack in the background
 
 - **CloudMind Dashboard:** [http://127.0.0.1:5050](http://127.0.0.1:5050)
 - **Prometheus Console:** [http://127.0.0.1:9090](http://127.0.0.1:9090)
+- **Alertmanager Console:** [http://127.0.0.1:9093](http://127.0.0.1:9093)
 - **Grafana Panel:** [http://127.0.0.1:3000](http://127.0.0.1:3000)
   Default credentials: `admin` / `admin`
 - **InfraMirror Webhook:** [http://127.0.0.1:5055/whisper](http://127.0.0.1:5055/whisper)
@@ -180,6 +184,8 @@ Then edit `.env`:
 ```bash
 GEMINI_API_KEY=your_gemini_key
 DISCORD_WEBHOOK_URL=your_discord_webhook
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=change_this_password
 ```
 
 Restart the stack:
@@ -201,6 +207,7 @@ Keep `.env` private. Never commit real secrets.
 | `inframirror/llm_engine.py` | Gemini prompt orchestration, fallback dialogue, persistence, Discord embeds |
 | `prometheus/prometheus.yml` | Prometheus scrape configuration |
 | `prometheus/alerts.yml` | Alert rule definitions |
+| `alertmanager/alertmanager.yml` | Prometheus alert routing into InfraMirror |
 | `grafana/provisioning/` | Provisioned Grafana dashboards, datasource, and alerting config |
 | `tests/` | Unit tests for services and watcher dialogue behavior |
 | `chaos.sh` | Interactive chaos and healing script |
@@ -213,7 +220,7 @@ Keep `.env` private. Never commit real secrets.
 - `inframirror` mounts `/var/run/docker.sock`; this is powerful and should be used only in controlled environments.
 - `.env` is ignored by Git and should contain secrets only on your machine.
 - If a token or API key is exposed, revoke and rotate it immediately.
-- Grafana starts with default credentials (`admin` / `admin`).
+- Override Grafana credentials in `.env` before running CloudMind in a shared environment.
 
 See [SECURITY.md](SECURITY.md) for credential rotation and operational safeguards.
 

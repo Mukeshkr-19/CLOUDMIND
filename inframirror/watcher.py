@@ -18,6 +18,14 @@ SERVICES = {
     "auth":     "http://auth:5054/metrics",
 }
 
+SERVICE_BY_INSTANCE = {
+    "frontend:5050": "frontend",
+    "api:5051": "api",
+    "database:5052": "database",
+    "cache:5053": "cache",
+    "auth:5054": "auth",
+}
+
 PROM_URL  = os.getenv("PROM_URL", "http://prometheus:9090")
 HEALING   = os.getenv("HEALING_ENABLED", "false").lower() == "true"
 WEBHOOK   = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
@@ -34,6 +42,9 @@ INCIDENT_DIALOGUE_COOLDOWN_SEC = int(os.getenv("INCIDENT_DIALOGUE_COOLDOWN_SEC",
 client = docker.from_env()
 _last_heal = {}  # service -> datetime
 _last_dialogue = {}  # service -> datetime
+
+def _current_webhook() -> str:
+    return os.getenv("DISCORD_WEBHOOK_URL", WEBHOOK).strip()
 
 def _service_container(service: str):
     containers = client.containers.list(
@@ -58,10 +69,11 @@ def _should_emit_dialogue(service: str, now: datetime) -> bool:
     return True
 
 def _send_discord_embed(payload: dict):
-    if not WEBHOOK:
+    webhook = _current_webhook()
+    if not webhook:
         return
     try:
-        requests.post(WEBHOOK, json=payload, timeout=3)
+        requests.post(webhook, json=payload, timeout=3)
     except Exception as e:
         print(f"[❌] Discord Webhook error: {e}")
 
@@ -94,7 +106,7 @@ def _maybe_heal(service: str, reason: str):
         print(f"[💊] HEALING ACTION: Restarting container {container.name} ({reason})...")
         
         # Send Healed Rich Embed to Discord
-        if WEBHOOK:
+        if _current_webhook():
             payload = {
                 "embeds": [{
                     "title": f"💊 [REMEDIATION EXECUTED] SERVICE: {service.upper()} HEALED!",
@@ -137,6 +149,7 @@ def _diagnose(service: str):
 
     if lat_v is None:
         lat_v = LAT_PAIN_MS if cpu_v and cpu_v >= CPU_HARD else 80
+        print(f"[⚠️] Missing latency sample for {service}; using fallback {lat_v:.0f}ms")
 
     # Checks
     trigger_heal = False
@@ -250,6 +263,8 @@ def receive_whisper_alert():
         if alerts:
             labels = alerts[0].get("labels", {})
             service = labels.get("service")
+            if not service:
+                service = SERVICE_BY_INSTANCE.get(labels.get("instance", ""))
         
     if service and service in SERVICES:
         print(f"[🤖 AI Engine] Processing webhook alert for service: {service.upper()}...")
@@ -290,7 +305,12 @@ def _process_whisper_alert(service: str, cpu: float, latency: float):
 
 def run_webhook_server():
     print("🚀 Exposing /whisper Webhook receiver on port 5055...")
-    app.run(host="0.0.0.0", port=5055, debug=False, use_reloader=False)
+    try:
+        from waitress import serve
+        serve(app, host="0.0.0.0", port=5055)
+    except ImportError:
+        print("[⚠️] Waitress not installed; falling back to Flask server")
+        app.run(host="0.0.0.0", port=5055, debug=False, use_reloader=False)
 
 if __name__ == "__main__":
     # Start Flask /whisper webhook receiver in a background thread

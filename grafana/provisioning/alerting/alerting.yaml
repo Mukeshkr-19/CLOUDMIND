@@ -38,7 +38,7 @@ groups:
         execErrState: Alerting
         for: 5s
         annotations:
-          summary: "CPU usage exceeded 80% on {{ $labels.service }}"
+          summary: "CPU usage exceeded 85% on {{ $labels.service }}"
           description: "The {{ $labels.service }} service is under high CPU load. Check logs or scale resources."
         labels:
           severity: critical

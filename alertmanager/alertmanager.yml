@@ -1,0 +1,15 @@
+global:
+  resolve_timeout: 1m
+
+route:
+  receiver: cloudmind-whisper
+  group_by: ['alertname', 'service', 'instance']
+  group_wait: 5s
+  group_interval: 30s
+  repeat_interval: 5m
+
+receivers:
+  - name: cloudmind-whisper
+    webhook_configs:
+      - url: http://inframirror:5055/whisper
+        send_resolved: true

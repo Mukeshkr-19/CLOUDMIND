@@ -1,6 +1,7 @@
 import unittest
 import sys
 import os
+from unittest.mock import patch
 
 # Add parent directory to sys.path so we can import inframirror
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -67,6 +68,22 @@ class TestSREWatcherAndEngine(unittest.TestCase):
         )
         self.assertIn("Memory - Database", dialogue)
         self.assertIn("InfraMirror - SRE", dialogue)
+
+    def test_incident_dialogue_can_suppress_discord(self):
+        with patch.object(llm_engine, "_send_discord_embed") as send_embed:
+            dialogue = llm_engine.generate_incident_dialogue(
+                "api",
+                90.0,
+                355,
+                gemini_key="",
+                persist=False,
+                send_discord=False,
+                webhook_url="https://example.invalid/webhook",
+            )
+
+        self.assertIn("Logic - API", dialogue)
+        self.assertIn("InfraMirror - SRE", dialogue)
+        send_embed.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()

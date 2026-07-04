@@ -15,6 +15,7 @@ BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Ports resolver (macOS Bash 3.2+ compatible)
 get_port() {
@@ -25,6 +26,13 @@ get_port() {
         "cache") echo 5053 ;;
         "auth") echo 5054 ;;
     esac
+}
+
+post_json() {
+    declare url=$1
+    declare response
+    response=$(curl -s -X POST "$url")
+    printf "%s" "$response" | python3 -m json.tool 2>/dev/null || printf "%s\n" "$response"
 }
 
 header() {
@@ -38,7 +46,7 @@ trigger_stress() {
     declare service=$1
     declare port=$(get_port "$service")
     echo -e "\n${RED}[🔥] Injecting chaos into $service (Port $port)...${NC}"
-    curl -s -X POST "http://127.0.0.1:$port/stress" | json_pp 2>/dev/null || curl -s "http://127.0.0.1:$port/stress"
+    post_json "http://127.0.0.1:$port/stress"
     echo -e "\n${GREEN}[✓] Outage successfully initiated. Monitoring telemetry...${NC}"
     sleep 2
 }
@@ -47,7 +55,7 @@ trigger_heal() {
     declare service=$1
     declare port=$(get_port "$service")
     echo -e "\n${GREEN}[🩹] Injecting manual remediation into $service (Port $port)...${NC}"
-    curl -s -X POST "http://127.0.0.1:$port/heal" | json_pp 2>/dev/null || curl -s "http://127.0.0.1:$port/heal"
+    post_json "http://127.0.0.1:$port/heal"
     echo -e "\n${GREEN}[✓] Heal signal successfully sent.${NC}"
     sleep 2
 }
@@ -55,7 +63,7 @@ trigger_heal() {
 show_watcher_logs() {
     echo -e "\n${YELLOW}[🔎] Fetching the latest Inside-Cloud SRE dialogues...${NC}"
     echo -e "${BLUE}-------------------------------------------------------------------------${NC}"
-    docker compose logs --tail 30 inframirror
+    docker compose --project-directory "$SCRIPT_DIR" logs --tail 30 inframirror
     echo -e "${BLUE}-------------------------------------------------------------------------${NC}"
     read -p "Press Enter to return to menu..."
 }

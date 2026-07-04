@@ -8,11 +8,17 @@ SHARED_DATA_DIR = os.getenv("SHARED_DATA_DIR", "/app/shared")
 SHARED_DIALOGUE_PATH = os.path.join(SHARED_DATA_DIR, "dialogues.json")
 SHARED_DIALOGUE_LOCK_PATH = os.path.join(SHARED_DATA_DIR, "dialogues.lock")
 
-def _send_discord_embed(payload: dict):
-    if not WEBHOOK:
+def _current_webhook(webhook_url: str = None) -> str:
+    if webhook_url is not None:
+        return webhook_url.strip()
+    return os.getenv("DISCORD_WEBHOOK_URL", WEBHOOK).strip()
+
+def _send_discord_embed(payload: dict, webhook_url: str = None):
+    webhook = _current_webhook(webhook_url)
+    if not webhook:
         return
     try:
-        requests.post(WEBHOOK, json=payload, timeout=3)
+        requests.post(webhook, json=payload, timeout=3)
     except Exception as e:
         print(f"[❌] Discord Webhook error: {e}")
 
@@ -29,7 +35,21 @@ def _call_gemini(prompt: str, gemini_key: str = None) -> str:
         }
         r = requests.post(url, json=payload, headers=headers, timeout=5)
         if r.status_code == 200:
-            return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            data = r.json()
+            candidates = data.get("candidates", [])
+            if not candidates:
+                print("[⚠️] Gemini API returned no candidates")
+                return ""
+
+            candidate = candidates[0]
+            finish_reason = candidate.get("finishReason")
+            parts = candidate.get("content", {}).get("parts", [])
+            if not parts or "text" not in parts[0]:
+                print(f"[⚠️] Gemini API returned no text part (finishReason={finish_reason})")
+                return ""
+
+            return parts[0]["text"].strip()
+        print(f"[⚠️] Gemini API returned status {r.status_code}: {r.text[:200]}")
     except Exception as e:
         print(f"[⚠️] Gemini API call failed: {e}")
     return ""
@@ -224,7 +244,7 @@ def trigger_healthy_dialogue(gemini_key: str = None, persist: bool = True) -> st
         _save_dialogue_to_volume(dialogue)
     return dialogue
 
-def trigger_incident_dialogue(service: str, cpu: float, latency: float, gemini_key: str = None, persist: bool = True, send_discord: bool = True) -> str:
+def trigger_incident_dialogue(service: str, cpu: float, latency: float, gemini_key: str = None, persist: bool = True, send_discord: bool = True, webhook_url: str = None) -> str:
     """Generates incident dialogue and sends dynamic rich Embeds to Discord."""
     print("\n" + "="*50)
     print(f"🎬 [INSIDE CLOUD] INCIDENT DETECTED ON SERVICE: {service.upper()} 🎬")
@@ -282,7 +302,7 @@ def trigger_incident_dialogue(service: str, cpu: float, latency: float, gemini_k
         _save_dialogue_to_volume(dialogue)
         
     # Send Premium Rich Embed to Discord
-    if send_discord and WEBHOOK:
+    if send_discord and _current_webhook(webhook_url):
         colors = {
             "frontend": 16105995,  # Gold #F59E0B
             "api": 6187730,       # Indigo/Blue #5E6AD2
@@ -310,11 +330,11 @@ def trigger_incident_dialogue(service: str, cpu: float, latency: float, gemini_k
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }]
         }
-        _send_discord_embed(payload)
+        _send_discord_embed(payload, webhook_url=webhook_url)
     return dialogue
 
 def generate_healthy_dialogue(gemini_key: str = None, persist: bool = True) -> str:
     return trigger_healthy_dialogue(gemini_key=gemini_key, persist=persist)
 
-def generate_incident_dialogue(service: str, cpu: float, latency: float, gemini_key: str = None, persist: bool = True, send_discord: bool = True) -> str:
-    return trigger_incident_dialogue(service, cpu, latency, gemini_key=gemini_key, persist=persist, send_discord=send_discord)
+def generate_incident_dialogue(service: str, cpu: float, latency: float, gemini_key: str = None, persist: bool = True, send_discord: bool = True, webhook_url: str = None) -> str:
+    return trigger_incident_dialogue(service, cpu, latency, gemini_key=gemini_key, persist=persist, send_discord=send_discord, webhook_url=webhook_url)
