@@ -5,7 +5,10 @@ from datetime import datetime, timedelta, timezone
 from prometheus_client.parser import text_string_to_metric_families
 from flask import Flask, request, jsonify
 
-import llm_engine
+try:
+    from . import llm_engine
+except ImportError:
+    import llm_engine
 
 # ----------------------------
 # Config (env overrides)
@@ -28,7 +31,6 @@ SERVICE_BY_INSTANCE = {
 
 PROM_URL  = os.getenv("PROM_URL", "http://prometheus:9090")
 HEALING   = os.getenv("HEALING_ENABLED", "false").lower() == "true"
-WEBHOOK   = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
 # heuristics
@@ -39,15 +41,22 @@ LAT_PAIN_MS   = float(os.getenv("LAT_PAIN_MS", "350"))
 COOLDOWN_SEC  = int(os.getenv("HEALING_COOLDOWN_SEC", "150"))
 INCIDENT_DIALOGUE_COOLDOWN_SEC = int(os.getenv("INCIDENT_DIALOGUE_COOLDOWN_SEC", "60"))
 
-client = docker.from_env()
+client = None
 _last_heal = {}  # service -> datetime
 _last_dialogue = {}  # service -> datetime
 
+def _docker_client():
+    global client
+    if client is None:
+        client = docker.from_env()
+    return client
+
 def _current_webhook() -> str:
-    return os.getenv("DISCORD_WEBHOOK_URL", WEBHOOK).strip()
+    return os.getenv("DISCORD_WEBHOOK_URL", "").strip()
 
 def _service_container(service: str):
-    containers = client.containers.list(
+    docker_client = _docker_client()
+    containers = docker_client.containers.list(
         all=True,
         filters={"label": f"com.docker.compose.service={service}"}
     )
@@ -57,7 +66,7 @@ def _service_container(service: str):
     # Fallback for older compose versions or manually named containers.
     name = f"cloudmind-{service}-1"
     try:
-        return client.containers.get(name)
+        return docker_client.containers.get(name)
     except Exception:
         return None
 
@@ -247,6 +256,13 @@ def receive_whisper_alert():
     """Receives Prometheus alert webhook callbacks and triggers AI remediation."""
     data = request.get_json(silent=True) or {}
     print(f"\n[🚨 Alert Webhook] Received telemetry alert: {json.dumps(data)}")
+
+    if data.get("status") == "resolved":
+        return jsonify({"status": "ignored", "reason": "alert resolved"}), 200
+
+    alerts = data.get("alerts", [])
+    if alerts and all(alert.get("status") == "resolved" for alert in alerts):
+        return jsonify({"status": "ignored", "reason": "all alerts resolved"}), 200
     
     # Extract service and telemetry from alert data
     # Standard format: {"service": "database", "cpu": 92.4, "latency": 380}
@@ -259,7 +275,6 @@ def receive_whisper_alert():
     
     if not service or service not in SERVICES:
         # Fallback parsing for Prometheus Alertmanager format
-        alerts = data.get("alerts", [])
         if alerts:
             labels = alerts[0].get("labels", {})
             service = labels.get("service")

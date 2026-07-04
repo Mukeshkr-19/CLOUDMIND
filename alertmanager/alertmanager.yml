@@ -12,4 +12,4 @@ receivers:
   - name: cloudmind-whisper
     webhook_configs:
       - url: http://inframirror:5055/whisper
-        send_resolved: true
+        send_resolved: false

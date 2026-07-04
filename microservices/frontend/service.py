@@ -865,13 +865,12 @@ def dashboard():
             let speaker = "";
             let dialogueText = formattedLine;
             
-            // Extract speaker
             if (formattedLine.startsWith("**[")) {
-                const match = formattedLine.match(/\\*\\*\\[([^\\]]+)\\]\\*\\*:(.*)/);
-                if (match) {
-                    speaker = match[1];
-                    dialogueText = match[2].trim();
-                    // Strip outer quotes if present
+                const closeTag = "]**:";
+                const closeIndex = formattedLine.indexOf(closeTag);
+                if (closeIndex > 3) {
+                    speaker = formattedLine.substring(3, closeIndex);
+                    dialogueText = formattedLine.substring(closeIndex + closeTag.length).trim();
                     if (dialogueText.startsWith('"') && dialogueText.endsWith('"')) {
                         dialogueText = dialogueText.substring(1, dialogueText.length - 1);
                     }
@@ -912,7 +911,7 @@ def dashboard():
                         </div>
                     `;
                     
-                    const lines = block.dialogue.split("\\n");
+                    const lines = block.dialogue.split(String.fromCharCode(10));
                     lines.forEach(line => {
                         html += formatDialogueLine(line);
                     });

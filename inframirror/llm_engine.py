@@ -3,7 +3,6 @@ import os, requests, json, random, fcntl, tempfile
 from datetime import datetime, timedelta, timezone
 
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-WEBHOOK = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
 SHARED_DATA_DIR = os.getenv("SHARED_DATA_DIR", "/app/shared")
 SHARED_DIALOGUE_PATH = os.path.join(SHARED_DATA_DIR, "dialogues.json")
 SHARED_DIALOGUE_LOCK_PATH = os.path.join(SHARED_DATA_DIR, "dialogues.lock")
@@ -11,7 +10,7 @@ SHARED_DIALOGUE_LOCK_PATH = os.path.join(SHARED_DATA_DIR, "dialogues.lock")
 def _current_webhook(webhook_url: str = None) -> str:
     if webhook_url is not None:
         return webhook_url.strip()
-    return os.getenv("DISCORD_WEBHOOK_URL", WEBHOOK).strip()
+    return os.getenv("DISCORD_WEBHOOK_URL", "").strip()
 
 def _send_discord_embed(payload: dict, webhook_url: str = None):
     webhook = _current_webhook(webhook_url)

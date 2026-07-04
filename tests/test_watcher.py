@@ -7,6 +7,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from inframirror import llm_engine
+from inframirror import watcher
 
 class TestSREWatcherAndEngine(unittest.TestCase):
     def test_healthy_fallback_generation(self):
@@ -84,6 +85,25 @@ class TestSREWatcherAndEngine(unittest.TestCase):
         self.assertIn("Logic - API", dialogue)
         self.assertIn("InfraMirror - SRE", dialogue)
         send_embed.assert_not_called()
+
+    def test_whisper_ignores_resolved_alertmanager_payload(self):
+        payload = {
+            "status": "resolved",
+            "alerts": [{
+                "status": "resolved",
+                "labels": {
+                    "alertname": "CriticalCPULoad",
+                    "service": "api",
+                },
+            }],
+        }
+
+        with patch.object(watcher, "_process_whisper_alert") as process_alert:
+            response = watcher.app.test_client().post("/whisper", json=payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["reason"], "alert resolved")
+        process_alert.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()

@@ -7,6 +7,7 @@ groups:
         for: 5s
         labels:
           severity: critical
+          service: "{{ $labels.job }}"
         annotations:
           summary: "Microservice down: {{ $labels.instance }}"
           description: "Service is unresponsive and cannot be scraped by Prometheus."

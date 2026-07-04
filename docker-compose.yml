@@ -10,6 +10,7 @@ x-microservice-resources: &microservice-resources
 services:
   frontend:
     build: ./microservices/frontend
+    restart: unless-stopped
     ports:
       - "5050:5050"
     volumes:
@@ -25,6 +26,7 @@ services:
 
   api:
     build: ./microservices/api
+    restart: unless-stopped
     ports:
       - "5051:5051"
     deploy:
@@ -38,6 +40,7 @@ services:
 
   database:
     build: ./microservices/database
+    restart: unless-stopped
     ports:
       - "5052:5052"
     deploy:
@@ -51,6 +54,7 @@ services:
 
   cache:
     build: ./microservices/cache
+    restart: unless-stopped
     ports:
       - "5053:5053"
     deploy:
@@ -64,6 +68,7 @@ services:
 
   auth:
     build: ./microservices/auth
+    restart: unless-stopped
     ports:
       - "5054:5054"
     deploy:
@@ -77,6 +82,7 @@ services:
 
   prometheus:
     image: prom/prometheus
+    restart: unless-stopped
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml
@@ -102,6 +108,7 @@ services:
 
   alertmanager:
     image: prom/alertmanager
+    restart: unless-stopped
     command:
       - "--config.file=/etc/alertmanager/alertmanager.yml"
       - "--storage.path=/alertmanager"
