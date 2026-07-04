@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST, CollectorRegistry
 import psutil, random, threading, time
 
@@ -24,6 +24,28 @@ SERVICE_NAME = "auth"
 is_stressed = False
 stress_latency_min = 0
 stress_latency_max = 0
+normal_latency_min = 60
+normal_latency_max = 190
+stressed_latency_min = 320
+stressed_latency_max = 460
+stressed_cpu_min = 86.0
+stressed_cpu_max = 97.0
+
+@app.before_request
+def track_request():
+    if request.endpoint != "metrics":
+        REQUEST_COUNT.labels(service=SERVICE_NAME).inc()
+
+def current_latency():
+    if is_stressed:
+        return random.randint(stress_latency_min, stress_latency_max)
+    return random.randint(normal_latency_min, normal_latency_max)
+
+def current_cpu(interval=0.05):
+    cpu = psutil.cpu_percent(interval=interval)
+    if is_stressed and cpu < 80:
+        return random.uniform(stressed_cpu_min, stressed_cpu_max)
+    return cpu
 
 def cpu_spike_worker():
     global is_stressed
@@ -34,20 +56,12 @@ def cpu_spike_worker():
 
 @app.route("/")
 def home():
-    REQUEST_COUNT.labels(service=SERVICE_NAME).inc()
-    
     # Introduce real or simulated latency
-    latency = random.randint(60, 190)
-    if is_stressed:
-        latency = random.randint(320, 460)
-        time.sleep(latency / 1000.0)
-    else:
-        time.sleep(latency / 1000.0)
+    latency = current_latency()
+    time.sleep(latency / 1000.0)
 
     # Calculate CPU load
-    cpu = psutil.cpu_percent(interval=0.1)
-    if is_stressed and cpu < 80:
-        cpu = random.uniform(86.0, 97.0)
+    cpu = current_cpu(interval=0.1)
         
     CPU_USAGE.labels(service=SERVICE_NAME).set(cpu)
 
@@ -66,13 +80,8 @@ def home():
 
 @app.route("/status")
 def status():
-    latency = random.randint(60, 190)
-    if is_stressed:
-        latency = random.randint(320, 460)
-        
-    cpu = psutil.cpu_percent(interval=0.05)
-    if is_stressed and cpu < 80:
-        cpu = random.uniform(86.0, 97.0)
+    latency = current_latency()
+    cpu = current_cpu()
         
     if cpu < 50 and latency < 200:
         mood = "secure 🔒"
@@ -95,15 +104,11 @@ def status():
 
 @app.route("/metrics")
 def metrics():
-    cpu = psutil.cpu_percent(interval=0.1)
-    if is_stressed and cpu < 80:
-        cpu = random.uniform(86.0, 97.0)
+    cpu = current_cpu(interval=0.1)
     CPU_USAGE.labels(service=SERVICE_NAME).set(cpu)
     
     # Calculate response latency
-    latency = random.randint(40, 170)
-    if is_stressed:
-        latency = random.randint(300, 450)
+    latency = current_latency()
     LATENCY.labels(service=SERVICE_NAME).set(latency)
     
     return generate_latest(registry), 200, {'Content-Type': CONTENT_TYPE_LATEST}
@@ -113,8 +118,8 @@ def trigger_stress():
     global is_stressed, stress_latency_min, stress_latency_max
     if not is_stressed:
         is_stressed = True
-        stress_latency_min = 320
-        stress_latency_max = 460
+        stress_latency_min = stressed_latency_min
+        stress_latency_max = stressed_latency_max
         for _ in range(2):
             threading.Thread(target=cpu_spike_worker, daemon=True).start()
     return jsonify({"status": "stressed", "service": SERVICE_NAME, "message": "Chaos injected! CPU load is rising."})
@@ -129,12 +134,8 @@ def trigger_heal():
 
 @app.route("/load")
 def load_status():
-    cpu = psutil.cpu_percent(interval=0.05)
-    if is_stressed and cpu < 80:
-        cpu = random.uniform(85.0, 96.0)
-    latency = random.randint(40, 180)
-    if is_stressed:
-        latency = random.randint(300, 450)
+    cpu = current_cpu()
+    latency = current_latency()
     return jsonify({
         "service": SERVICE_NAME,
         "load_cpu_percent": cpu,

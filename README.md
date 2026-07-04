@@ -6,7 +6,7 @@ CloudMind is a creative **Dialogic Telemetry & Closed-Loop SRE Auto-Remediation 
 
 CloudMind brings together **Docker orchestration, Flask microservices, Prometheus metrics, Grafana provisioning, webhook-driven incident handling, shared-volume state, and AI-assisted infrastructure storytelling** into one cohesive SRE observability system.
 
-> **Note:** CloudMind is designed for controlled development and lab environments. Its auto-remediation intentionally mounts the Docker socket so the watcher can restart managed CloudMind containers.
+> **Note:** CloudMind is designed for controlled, operator-owned environments. Its auto-remediation intentionally mounts the Docker socket so the watcher can restart managed CloudMind containers.
 
 ---
 
@@ -53,15 +53,15 @@ graph TD
 2. **Telemetry Layer (`prometheus/`)**: Prometheus scrapes every service and exposes queryable health signals.
 3. **SRE AI Watcher (`inframirror/`)**: InfraMirror watches Prometheus, receives `/whisper` webhooks, generates character dialogue, and performs container remediation.
 4. **Persistent Dialogue Feed**: Incident conversations are written to `shared-data/dialogues.json`, so the dashboard can display recent system conversations even after restarts.
-5. **Dashboard Experience**: The Frontend at `http://localhost:5050` shows service health, stress controls, and the Inside-Cloud dialogue console.
+5. **Dashboard Experience**: The Frontend at `http://127.0.0.1:5050` shows service health, stress controls, and the Inside-Cloud dialogue console.
 
 ---
 
-## 🚀 SRE Core Concepts Demonstrated
+## 🚀 SRE Core Concepts
 
 ### 1. Auto-Remediation vs. Horizontal Scaling
 
-CloudMind demonstrates the difference between scaling and healing:
+CloudMind shows the difference between scaling and healing:
 
 - **Horizontal Scaling Simulation:** As CPU rises, the dashboard can show active replicas scaling from `1 Pod` toward `3 Pods`.
 - **Auto-Remediation:** When a service crosses the critical threshold, InfraMirror can generate an incident dialogue and restart the affected container.
@@ -95,11 +95,11 @@ This rebuilds the services and starts the full CloudMind stack in the background
 
 ### 2. Access the Interfaces
 
-- **CloudMind Dashboard:** [http://localhost:5050](http://localhost:5050)
-- **Prometheus Console:** [http://localhost:9090](http://localhost:9090)
-- **Grafana Panel:** [http://localhost:3000](http://localhost:3000)
-  Default login: `admin` / `admin`
-- **InfraMirror Webhook:** [http://localhost:5055/whisper](http://localhost:5055/whisper)
+- **CloudMind Dashboard:** [http://127.0.0.1:5050](http://127.0.0.1:5050)
+- **Prometheus Console:** [http://127.0.0.1:9090](http://127.0.0.1:9090)
+- **Grafana Panel:** [http://127.0.0.1:3000](http://127.0.0.1:3000)
+  Default credentials: `admin` / `admin`
+- **InfraMirror Webhook:** [http://127.0.0.1:5055/whisper](http://127.0.0.1:5055/whisper)
 
 ### 3. Stop the Cluster
 
@@ -128,7 +128,7 @@ Choose a service to stress, heal, or inspect through the menu.
 ### Option B: Trigger a Service Directly
 
 ```bash
-curl -X POST http://localhost:5052/stress
+curl -X POST http://127.0.0.1:5052/stress
 ```
 
 Then watch:
@@ -142,7 +142,7 @@ Then watch:
 ### Option C: Test the `/whisper` Webhook
 
 ```bash
-curl -i -X POST http://localhost:5055/whisper \
+curl -i -X POST http://127.0.0.1:5055/whisper \
   -H 'Content-Type: application/json' \
   -d '{"service":"database","cpu":91.2,"latency":401}'
 ```
@@ -162,6 +162,8 @@ docker compose config --quiet
 ```
 
 The tests cover the Flask service endpoints and the InfraMirror dialogue fallback path.
+
+GitHub Actions also runs Python compilation, unit tests, Docker Compose validation, and secret scanning on pushed branches and pull requests.
 
 ---
 
@@ -202,6 +204,7 @@ Keep `.env` private. Never commit real secrets.
 | `grafana/provisioning/` | Provisioned Grafana dashboards, datasource, and alerting config |
 | `tests/` | Unit tests for services and watcher dialogue behavior |
 | `chaos.sh` | Interactive chaos and healing script |
+| `SECURITY.md` | Secret handling, rotation, Docker socket, and webhook guidance |
 
 ---
 
@@ -210,18 +213,20 @@ Keep `.env` private. Never commit real secrets.
 - `inframirror` mounts `/var/run/docker.sock`; this is powerful and should be used only in controlled environments.
 - `.env` is ignored by Git and should contain secrets only on your machine.
 - If a token or API key is exposed, revoke and rotate it immediately.
-- Grafana uses default development credentials (`admin` / `admin`).
+- Grafana starts with default credentials (`admin` / `admin`).
+
+See [SECURITY.md](SECURITY.md) for credential rotation and operational safeguards.
 
 ---
 
 ## 🌟 Why CloudMind Is Different
 
-CloudMind is not just another metrics dashboard. It turns infrastructure behavior into a readable incident narrative:
+CloudMind is an observability system that turns infrastructure behavior into a readable incident narrative:
 
 - Engineers get telemetry.
-- Viewers get a story.
+- Operators get a clear incident trail.
 - The system explains what is hurting.
 - The watcher can act.
 - The dashboard keeps the incident memory.
 
-That combination makes CloudMind a distinctive SRE observability platform: technical enough to show real systems engineering depth, and memorable enough that people remember how it works.
+That combination makes CloudMind a distinctive SRE observability platform with concrete Docker orchestration, metrics, alert routing, remediation control, and incident history.

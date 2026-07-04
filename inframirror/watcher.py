@@ -29,17 +29,33 @@ CPU_HARD      = float(os.getenv("CPU_HARD_THRESHOLD", "85"))
 LAT_WARN_MS   = float(os.getenv("LAT_WARN_MS", "250"))
 LAT_PAIN_MS   = float(os.getenv("LAT_PAIN_MS", "350"))
 COOLDOWN_SEC  = int(os.getenv("HEALING_COOLDOWN_SEC", "150"))
-
-CONTAINER_BY_SERVICE = {
-    "frontend": "cloudmind-frontend-1",
-    "api":      "cloudmind-api-1",
-    "database": "cloudmind-database-1",
-    "cache":    "cloudmind-cache-1",
-    "auth":     "cloudmind-auth-1",
-}
+INCIDENT_DIALOGUE_COOLDOWN_SEC = int(os.getenv("INCIDENT_DIALOGUE_COOLDOWN_SEC", "60"))
 
 client = docker.from_env()
 _last_heal = {}  # service -> datetime
+_last_dialogue = {}  # service -> datetime
+
+def _service_container(service: str):
+    containers = client.containers.list(
+        all=True,
+        filters={"label": f"com.docker.compose.service={service}"}
+    )
+    if containers:
+        return sorted(containers, key=lambda c: c.name)[0]
+
+    # Fallback for older compose versions or manually named containers.
+    name = f"cloudmind-{service}-1"
+    try:
+        return client.containers.get(name)
+    except Exception:
+        return None
+
+def _should_emit_dialogue(service: str, now: datetime) -> bool:
+    last = _last_dialogue.get(service)
+    if last and (now - last) < timedelta(seconds=INCIDENT_DIALOGUE_COOLDOWN_SEC):
+        return False
+    _last_dialogue[service] = now
+    return True
 
 def _send_discord_embed(payload: dict):
     if not WEBHOOK:
@@ -69,13 +85,13 @@ def _prom_query(expr: str):
 
 
 def _maybe_heal(service: str, reason: str):
-    name = CONTAINER_BY_SERVICE.get(service)
-    if not name:
-        print(f"[❓] No container mapping for {service}, skip healing")
+    container = _service_container(service)
+    if not container:
+        print(f"[❓] No Docker container found for service={service}, skip healing")
         return False
 
     try:
-        print(f"[💊] HEALING ACTION: Restarting container {name} ({reason})...")
+        print(f"[💊] HEALING ACTION: Restarting container {container.name} ({reason})...")
         
         # Send Healed Rich Embed to Discord
         if WEBHOOK:
@@ -85,7 +101,7 @@ def _maybe_heal(service: str, reason: str):
                     "description": f"Automated self-healing successfully resolved the deadlock on `{service}`.",
                     "color": 65280, # Pure SRE Green #00FF00
                     "fields": [
-                        {"name": "🏥 SRE Remediation Action", "value": f"Successfully restarted `{name}` container.", "inline": True},
+                        {"name": "🏥 SRE Remediation Action", "value": f"Successfully restarted `{container.name}` container.", "inline": True},
                         {"name": "📊 Cluster Status", "value": "`Operational`", "inline": True},
                         {"name": "📈 New CPU Load", "value": "`0.0%` (Fresh Boot)", "inline": True}
                     ],
@@ -97,7 +113,6 @@ def _maybe_heal(service: str, reason: str):
             }
             _send_discord_embed(payload)
             
-        container = client.containers.get(name)
         container.restart()
         return True
     except Exception as e:
@@ -121,7 +136,7 @@ def _diagnose(service: str):
     lat_v   = lat[0][1] if lat else None
 
     if lat_v is None:
-        lat_v = 380 if cpu_v and cpu_v >= CPU_HARD else 80
+        lat_v = LAT_PAIN_MS if cpu_v and cpu_v >= CPU_HARD else 80
 
     # Checks
     trigger_heal = False
@@ -135,10 +150,19 @@ def _diagnose(service: str):
         now = datetime.now(timezone.utc)
         last = _last_heal.get(service)
         if last and (now - last) < timedelta(seconds=COOLDOWN_SEC):
-            print(f"[⏳] Healing cooldown active for {service} (skipping dialogue and action)")
+            print(f"[⏳] Healing cooldown active for {service} (skipping action)")
+            if _should_emit_dialogue(service, now):
+                llm_engine.generate_incident_dialogue(
+                    service,
+                    cpu_v,
+                    lat_v,
+                    gemini_key=GEMINI_KEY,
+                    send_discord=False,
+                )
             return
             
-        llm_engine.generate_incident_dialogue(service, cpu_v, lat_v, gemini_key=GEMINI_KEY)
+        if _should_emit_dialogue(service, now):
+            llm_engine.generate_incident_dialogue(service, cpu_v, lat_v, gemini_key=GEMINI_KEY)
         
         if HEALING:
             success = _maybe_heal(service, reason)
@@ -185,8 +209,8 @@ def watch():
                     interpret_metrics(service, r.text)
                 else:
                     print(f"[❌] {service} metrics returned {r.status_code}")
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[❌] Failed to scrape {service} metrics from {url}: {e}")
                 
         # Steady state check: if no active outage, trigger healthy ambient dialogues at regular intervals
         try:
@@ -240,13 +264,22 @@ def receive_whisper_alert():
 
 def _process_whisper_alert(service: str, cpu: float, latency: float):
     """Runs slower dialogue + healing work away from the webhook response path."""
-    llm_engine.trigger_incident_dialogue(service, cpu, latency, gemini_key=GEMINI_KEY)
-
     now = datetime.now(timezone.utc)
     last = _last_heal.get(service)
     if last and (now - last) < timedelta(seconds=COOLDOWN_SEC):
         print(f"[⏳] Webhook healing cooldown active for {service}")
+        if _should_emit_dialogue(service, now):
+            llm_engine.trigger_incident_dialogue(
+                service,
+                cpu,
+                latency,
+                gemini_key=GEMINI_KEY,
+                send_discord=False,
+            )
         return
+
+    if _should_emit_dialogue(service, now):
+        llm_engine.trigger_incident_dialogue(service, cpu, latency, gemini_key=GEMINI_KEY)
 
     if HEALING:
         success = _maybe_heal(service, f"Webhook Alert: CPU={cpu}% Latency={latency}ms")

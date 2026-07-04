@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request, render_template_string
 from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST, CollectorRegistry
-import psutil, random, threading, time, os, json
+import psutil, random, threading, time, os, json, fcntl, tempfile
 
 registry = CollectorRegistry()
 
@@ -24,6 +24,57 @@ SERVICE_NAME = "frontend"
 is_stressed = False
 stress_latency_min = 0
 stress_latency_max = 0
+normal_latency_min = 50
+normal_latency_max = 190
+stressed_latency_min = 350
+stressed_latency_max = 450
+stressed_cpu_min = 86.0
+stressed_cpu_max = 97.0
+DIALOGUE_DIR = "/app/shared"
+DIALOGUE_PATH = os.path.join(DIALOGUE_DIR, "dialogues.json")
+DIALOGUE_LOCK_PATH = os.path.join(DIALOGUE_DIR, "dialogues.lock")
+
+@app.before_request
+def track_request():
+    if request.endpoint not in {"metrics", "get_dialogues"}:
+        REQUEST_COUNT.labels(service=SERVICE_NAME).inc()
+
+def current_latency():
+    if is_stressed:
+        return random.randint(stress_latency_min, stress_latency_max)
+    return random.randint(normal_latency_min, normal_latency_max)
+
+def current_cpu(interval=0.05):
+    cpu = psutil.cpu_percent(interval=interval)
+    if is_stressed and cpu < 80:
+        return random.uniform(stressed_cpu_min, stressed_cpu_max)
+    return cpu
+
+def _dialogue_lock():
+    os.makedirs(DIALOGUE_DIR, exist_ok=True)
+    lock = open(DIALOGUE_LOCK_PATH, "w")
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    return lock
+
+def _read_dialogue_history():
+    if not os.path.exists(DIALOGUE_PATH):
+        return []
+    try:
+        with open(DIALOGUE_PATH, "r") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def _write_dialogue_history(history):
+    os.makedirs(DIALOGUE_DIR, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix="dialogues-", suffix=".json", dir=DIALOGUE_DIR)
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(history, f)
+        os.replace(tmp_path, DIALOGUE_PATH)
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 def cpu_spike_worker():
     global is_stressed
@@ -379,7 +430,6 @@ def dashboard():
             font-family: 'Inter', sans-serif;
             font-size: 0.8rem;
             font-weight: 600;
-            cursor: pointer;
             transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
             display: flex;
             align-items: center;
@@ -731,6 +781,9 @@ def dashboard():
             auth: 5054
         };
 
+        const host = window.location.hostname || "127.0.0.1";
+        const serviceUrl = (port, path) => `${window.location.protocol}//${host}:${port}${path}`;
+
         const charTags = {
             "Joy - Frontend": "var(--joy-color)",
             "Logic - API": "var(--logic-color)",
@@ -742,20 +795,20 @@ def dashboard():
 
         async function stress(service) {
             try {
-                fetch(`http://localhost:${ports[service]}/stress`);
+                fetch(serviceUrl(ports[service], "/stress"));
             } catch (err) {}
         }
 
         async function heal(service) {
             try {
-                fetch(`http://localhost:${ports[service]}/heal`);
+                fetch(serviceUrl(ports[service], "/heal"));
             } catch (err) {}
         }
 
         async function updateStatus() {
             for (const [service, port] of Object.entries(ports)) {
                 try {
-                    const response = await fetch(`http://localhost:${port}/status`);
+                    const response = await fetch(serviceUrl(port, "/status"));
                     const data = await response.json();
                     
                     document.getElementById(`cpu-${service}`).textContent = `${data.cpu.toFixed(1)}%`;
@@ -840,7 +893,7 @@ def dashboard():
 
         async function updateDialogues() {
             try {
-                const response = await fetch(`http://localhost:5050/dialogues`);
+                const response = await fetch(serviceUrl(5050, "/dialogues"));
                 const history = await response.json();
                 
                 const consoleEl = document.getElementById("dialogue-console");
@@ -883,13 +936,8 @@ def dashboard():
 
 @app.route("/status")
 def status():
-    latency = random.randint(50, 190)
-    if is_stressed:
-        latency = random.randint(350, 450)
-    
-    cpu = psutil.cpu_percent(interval=0.05)
-    if is_stressed and cpu < 80:
-        cpu = random.uniform(86.0, 97.0)
+    latency = current_latency()
+    cpu = current_cpu()
         
     if cpu < 50 and latency < 200:
         mood = "happy 😄"
@@ -912,52 +960,37 @@ def status():
 
 @app.route("/dialogue", methods=["POST"])
 def post_dialogue():
-    data = request.json
+    data = request.get_json(silent=True)
     if data and "dialogue" in data:
-        shared_dir = "/app/shared"
-        os.makedirs(shared_dir, exist_ok=True)
-        filepath = os.path.join(shared_dir, "dialogues.json")
-        history = []
-        if os.path.exists(filepath):
-            try:
-                with open(filepath, "r") as f:
-                    history = json.load(f)
-            except Exception:
-                pass
-        history.insert(0, {
-            "timestamp": time.strftime("%H:%M:%S"),
-            "dialogue": data["dialogue"]
-        })
-        history = history[:10]
+        lock = _dialogue_lock()
         try:
-            with open(filepath, "w") as f:
-                json.dump(history, f)
-        except Exception:
-            pass
+            history = _read_dialogue_history()
+            history.insert(0, {
+                "timestamp": time.strftime("%H:%M:%S"),
+                "dialogue": data["dialogue"]
+            })
+            _write_dialogue_history(history[:10])
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+            lock.close()
     return jsonify({"status": "success"})
 
 @app.route("/dialogues", methods=["GET"])
 def get_dialogues():
-    shared_path = "/app/shared/dialogues.json"
-    if os.path.exists(shared_path):
-        try:
-            with open(shared_path, "r") as f:
-                return jsonify(json.load(f))
-        except Exception:
-            pass
-    return jsonify([])
+    lock = _dialogue_lock()
+    try:
+        return jsonify(_read_dialogue_history())
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
 
 @app.route("/metrics")
 def metrics():
-    cpu = psutil.cpu_percent(interval=0.05)
-    if is_stressed and cpu < 80:
-        cpu = random.uniform(86.0, 97.0)
+    cpu = current_cpu()
     CPU_USAGE.labels(service=SERVICE_NAME).set(cpu)
     
     # Calculate response latency
-    latency = random.randint(50, 190)
-    if is_stressed:
-        latency = random.randint(350, 450)
+    latency = current_latency()
     LATENCY.labels(service=SERVICE_NAME).set(latency)
     
     return generate_latest(registry), 200, {'Content-Type': CONTENT_TYPE_LATEST}
@@ -967,8 +1000,8 @@ def trigger_stress():
     global is_stressed, stress_latency_min, stress_latency_max
     if not is_stressed:
         is_stressed = True
-        stress_latency_min = 350
-        stress_latency_max = 450
+        stress_latency_min = stressed_latency_min
+        stress_latency_max = stressed_latency_max
         for _ in range(2):
             threading.Thread(target=cpu_spike_worker, daemon=True).start()
     return jsonify({"status": "stressed", "service": SERVICE_NAME, "message": "Chaos injected! CPU load is rising."})
@@ -983,12 +1016,8 @@ def trigger_heal():
 
 @app.route("/load")
 def load_status():
-    cpu = psutil.cpu_percent(interval=0.05)
-    if is_stressed and cpu < 80:
-        cpu = random.uniform(85.0, 96.0)
-    latency = random.randint(40, 180)
-    if is_stressed:
-        latency = random.randint(300, 450)
+    cpu = current_cpu()
+    latency = current_latency()
     return jsonify({
         "service": SERVICE_NAME,
         "load_cpu_percent": cpu,

@@ -50,8 +50,8 @@ class TestSREWatcherAndEngine(unittest.TestCase):
         self.assertIn("92.4%", dialogue)
         self.assertIn("380ms", dialogue)
 
-    def test_trigger_healthy_dialogue_local(self):
-        # Trigger ambient dialogue (should fall back to local scripts successfully)
+    def test_trigger_healthy_dialogue_builtin(self):
+        # Trigger ambient dialogue (should fall back to built-in scripts successfully)
         dialogue = llm_engine.trigger_healthy_dialogue(persist=False)
         self.assertTrue(len(dialogue) > 0)
         lines = [line for line in dialogue.split('\n') if line.strip()]

@@ -3,8 +3,8 @@
 # CloudMind — Chaos Engineering & Resiliency Orchestrator
 # =========================================================================
 # This script injects simulated outages, CPU deadlocks, and DDoS loads
-# into the cluster, allowing you to witness the automated SRE watcher
-# auto-heal and generate character-driven dialogues.
+# into the cluster while the SRE watcher heals services and records
+# character-driven incident dialogues.
 # =========================================================================
 
 # Colors
@@ -35,19 +35,19 @@ header() {
 }
 
 trigger_stress() {
-    local service=$1
-    local port=$(get_port "$service")
+    declare service=$1
+    declare port=$(get_port "$service")
     echo -e "\n${RED}[🔥] Injecting chaos into $service (Port $port)...${NC}"
-    curl -s -X POST "http://localhost:$port/stress" | json_pp 2>/dev/null || curl -s "http://localhost:$port/stress"
+    curl -s -X POST "http://127.0.0.1:$port/stress" | json_pp 2>/dev/null || curl -s "http://127.0.0.1:$port/stress"
     echo -e "\n${GREEN}[✓] Outage successfully initiated. Monitoring telemetry...${NC}"
     sleep 2
 }
 
 trigger_heal() {
-    local service=$1
-    local port=$(get_port "$service")
+    declare service=$1
+    declare port=$(get_port "$service")
     echo -e "\n${GREEN}[🩹] Injecting manual remediation into $service (Port $port)...${NC}"
-    curl -s -X POST "http://localhost:$port/heal" | json_pp 2>/dev/null || curl -s "http://localhost:$port/heal"
+    curl -s -X POST "http://127.0.0.1:$port/heal" | json_pp 2>/dev/null || curl -s "http://127.0.0.1:$port/heal"
     echo -e "\n${GREEN}[✓] Heal signal successfully sent.${NC}"
     sleep 2
 }
@@ -55,22 +55,22 @@ trigger_heal() {
 show_watcher_logs() {
     echo -e "\n${YELLOW}[🔎] Fetching the latest Inside-Cloud SRE dialogues...${NC}"
     echo -e "${BLUE}-------------------------------------------------------------------------${NC}"
-    docker logs cloudmind-inframirror-1 --tail 30
+    docker compose logs --tail 30 inframirror
     echo -e "${BLUE}-------------------------------------------------------------------------${NC}"
     read -p "Press Enter to return to menu..."
 }
 
 full_chaos_monkey() {
     echo -e "\n${RED}[🚨 ALERT] Unleashing the Chaos Monkey onto the cluster!${NC}"
-    local services=("frontend" "api" "database" "cache" "auth")
-    local rand1=$((RANDOM % 5))
-    local rand2=$((RANDOM % 5))
+    declare services=("frontend" "api" "database" "cache" "auth")
+    declare rand1=$((RANDOM % 5))
+    declare rand2=$((RANDOM % 5))
     while [ $rand1 -eq $rand2 ]; do
         rand2=$((RANDOM % 5))
     done
     
-    local svc1=${services[$rand1]}
-    local svc2=${services[$rand2]}
+    declare svc1=${services[$rand1]}
+    declare svc2=${services[$rand2]}
     
     echo -e "${RED}[🔥] Targeting Service 1: $svc1${NC}"
     trigger_stress "$svc1"

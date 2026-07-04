@@ -1,10 +1,12 @@
 # llm_engine.py – AI Cloud Brain Dialogue Engine & Prompt Orchestration
-import os, requests, json, random
+import os, requests, json, random, fcntl, tempfile
 from datetime import datetime, timedelta, timezone
 
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 WEBHOOK = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
 SHARED_DATA_DIR = os.getenv("SHARED_DATA_DIR", "/app/shared")
+SHARED_DIALOGUE_PATH = os.path.join(SHARED_DATA_DIR, "dialogues.json")
+SHARED_DIALOGUE_LOCK_PATH = os.path.join(SHARED_DATA_DIR, "dialogues.lock")
 
 def _send_discord_embed(payload: dict):
     if not WEBHOOK:
@@ -83,7 +85,7 @@ def _generate_fallback_dialogue(service: str, cpu: float, latency: float) -> str
             "**[Swift - Cache]**: \"Just flushed the expired cache pools! Swift is ready for action!\""
         ],
         "auth": [
-            "**[Gatekeeper - Auth]**: \"All session session tokens verified. 🔒 Frontend, make sure these requests aren't malicious!\"",
+            "**[Gatekeeper - Auth]**: \"All session tokens verified. 🔒 Frontend, make sure these requests aren't malicious!\"",
             "**[Gatekeeper - Auth]**: \"I reject invalid authentication headers! No bad actors allowed in this cluster!\"",
             "**[Gatekeeper - Auth]**: \"Stay secure, team. 🔒 If the DB lag continues, I will start throttling login tokens!\""
         ]
@@ -143,35 +145,37 @@ def _generate_healthy_fallback_dialogue() -> str:
     return "\n".join(selected)
 
 def _save_dialogue_to_volume(dialogue: str):
-    shared_dir = SHARED_DATA_DIR
-    if not os.path.exists(shared_dir):
-        try:
-            os.makedirs(shared_dir, exist_ok=True)
-        except Exception:
-            pass
-        
-    filepath = os.path.join(shared_dir, "dialogues.json")
-    history = []
-    
-    if os.path.exists(filepath):
-        try:
-            with open(filepath, "r") as f:
-                history = json.load(f)
-        except Exception:
-            pass
-            
-    history.insert(0, {
-        "timestamp": datetime.now().strftime("%H:%M:%S"),
-        "dialogue": dialogue
-    })
-    
-    history = history[:10]
-    
+    os.makedirs(SHARED_DATA_DIR, exist_ok=True)
+    lock = open(SHARED_DIALOGUE_LOCK_PATH, "w")
     try:
-        with open(filepath, "w") as f:
-            json.dump(history, f)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        history = []
+        if os.path.exists(SHARED_DIALOGUE_PATH):
+            try:
+                with open(SHARED_DIALOGUE_PATH, "r") as f:
+                    history = json.load(f)
+            except Exception:
+                pass
+
+        history.insert(0, {
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "dialogue": dialogue
+        })
+        history = history[:10]
+
+        fd, tmp_path = tempfile.mkstemp(prefix="dialogues-", suffix=".json", dir=SHARED_DATA_DIR)
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(history, f)
+            os.replace(tmp_path, SHARED_DIALOGUE_PATH)
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
     except Exception as e:
         print(f"[❌] Failed to write dialogues.json: {e}")
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
 
 def trigger_healthy_dialogue(gemini_key: str = None, persist: bool = True) -> str:
     """Generates peaceful, character-driven ambient conversation when cluster is healthy."""
@@ -210,7 +214,7 @@ def trigger_healthy_dialogue(gemini_key: str = None, persist: bool = True) -> st
         dialogue = _call_gemini(gemini_prompt, key)
         
     if not dialogue:
-        print("[Local Engine] Generating healthy dialogue from predefined scripts...")
+        print("[Built-in Engine] Generating healthy dialogue from predefined scripts...")
         dialogue = _generate_healthy_fallback_dialogue()
         
     print(dialogue)
@@ -220,7 +224,7 @@ def trigger_healthy_dialogue(gemini_key: str = None, persist: bool = True) -> st
         _save_dialogue_to_volume(dialogue)
     return dialogue
 
-def trigger_incident_dialogue(service: str, cpu: float, latency: float, gemini_key: str = None, persist: bool = True) -> str:
+def trigger_incident_dialogue(service: str, cpu: float, latency: float, gemini_key: str = None, persist: bool = True, send_discord: bool = True) -> str:
     """Generates incident dialogue and sends dynamic rich Embeds to Discord."""
     print("\n" + "="*50)
     print(f"🎬 [INSIDE CLOUD] INCIDENT DETECTED ON SERVICE: {service.upper()} 🎬")
@@ -257,7 +261,7 @@ def trigger_incident_dialogue(service: str, cpu: float, latency: float, gemini_k
         dialogue = _call_gemini(gemini_prompt, key)
         
     if not dialogue:
-        print("[Local Engine] Generating dialogue from predefined scripts...")
+        print("[Built-in Engine] Generating dialogue from predefined scripts...")
         dialogue = _generate_fallback_dialogue(service, cpu, latency)
     else:
         # Programmatically ensure SRE resolution line is appended to LLM generated dialogues
@@ -278,7 +282,7 @@ def trigger_incident_dialogue(service: str, cpu: float, latency: float, gemini_k
         _save_dialogue_to_volume(dialogue)
         
     # Send Premium Rich Embed to Discord
-    if WEBHOOK:
+    if send_discord and WEBHOOK:
         colors = {
             "frontend": 16105995,  # Gold #F59E0B
             "api": 6187730,       # Indigo/Blue #5E6AD2
@@ -287,7 +291,7 @@ def trigger_incident_dialogue(service: str, cpu: float, latency: float, gemini_k
             "auth": 1096065        # Green #10B981
         }
         color = colors.get(service, 12616956)
-        discord_dialogue = dialogue.replace("\\n", "\n")
+        discord_dialogue = dialogue
         
         payload = {
             "embeds": [{
@@ -312,5 +316,5 @@ def trigger_incident_dialogue(service: str, cpu: float, latency: float, gemini_k
 def generate_healthy_dialogue(gemini_key: str = None, persist: bool = True) -> str:
     return trigger_healthy_dialogue(gemini_key=gemini_key, persist=persist)
 
-def generate_incident_dialogue(service: str, cpu: float, latency: float, gemini_key: str = None, persist: bool = True) -> str:
-    return trigger_incident_dialogue(service, cpu, latency, gemini_key=gemini_key, persist=persist)
+def generate_incident_dialogue(service: str, cpu: float, latency: float, gemini_key: str = None, persist: bool = True, send_discord: bool = True) -> str:
+    return trigger_incident_dialogue(service, cpu, latency, gemini_key=gemini_key, persist=persist, send_discord=send_discord)

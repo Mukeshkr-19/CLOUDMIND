@@ -4,9 +4,9 @@
 
 # Environment variables & secrets (CRITICAL: Never commit to Git!)
 .env
-.env.local
+.env.*
 .env.production
-.env.development
+!.env.example
 
 # Python
 __pycache__/
@@ -38,6 +38,3 @@ Thumbs.db
 
 # Documents & requirements
 *.docx
-
-# Local-only workflow drafts
-.github/

@@ -6,7 +6,7 @@ contactPoints:
       - uid: discord-receiver
         type: discord
         settings:
-          url: "${DISCORD_WEBHOOK_URL}"
+          url: "$DISCORD_WEBHOOK_URL"
           message: |
             **Status:** {{ .Status }}
             **Summary:** {{ .Annotations.summary }}
@@ -29,7 +29,7 @@ groups:
               to: 0
             datasourceUid: Prometheus
             model:
-              expr: service_cpu_percent > 80
+              expr: service_cpu_percent >= 85
               intervalMs: 10000
               maxDataPoints: 43200
               refId: A
