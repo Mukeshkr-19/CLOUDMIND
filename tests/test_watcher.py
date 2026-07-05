@@ -115,5 +115,49 @@ class TestSREWatcherAndEngine(unittest.TestCase):
         self.assertEqual(response.get_json()["reason"], "alert resolved")
         process_alert.assert_not_called()
 
+    def test_whisper_rejects_query_token(self):
+        with patch.dict(os.environ, {"WHISPER_TOKEN": "test-token"}):
+            response = watcher.app.test_client().post(
+                "/whisper?token=test-token",
+                json={"service": "api", "cpu": 90, "latency": 350},
+            )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_diagnose_uses_max_series_and_detects_down_target(self):
+        values = {
+            'service_cpu_percent{service="api"}': [({}, 10.0), ({}, 88.0)],
+            'rate(service_requests_total{service="api"}[1m])': [({}, 1.0)],
+            'service_latency_ms{service="api"}': [({}, 120.0), ({}, 380.0)],
+            'up{job="api"}': [({}, 1.0)],
+        }
+
+        with patch.object(watcher, "_prom_query", side_effect=lambda query: values.get(query, [])), \
+             patch.object(watcher.llm_engine, "generate_incident_dialogue") as generate_dialogue, \
+             patch.object(watcher, "_maybe_heal", return_value=False) as maybe_heal, \
+             patch.object(watcher, "HEALING", True), \
+             patch("time.sleep", return_value=None):
+            watcher._last_dialogue.clear()
+            watcher._diagnose("api")
+
+        generate_dialogue.assert_called_once()
+        maybe_heal.assert_called_once()
+        self.assertIn("CPU 88.0%", maybe_heal.call_args.args[1])
+
+        values['service_cpu_percent{service="api"}'] = []
+        values['service_latency_ms{service="api"}'] = []
+        values['up{job="api"}'] = [({}, 0.0)]
+
+        with patch.object(watcher, "_prom_query", side_effect=lambda query: values.get(query, [])), \
+             patch.object(watcher.llm_engine, "generate_incident_dialogue"), \
+             patch.object(watcher, "_maybe_heal", return_value=False) as maybe_heal, \
+             patch.object(watcher, "HEALING", True), \
+             patch("time.sleep", return_value=None):
+            watcher._last_dialogue.clear()
+            watcher._diagnose("api")
+
+        maybe_heal.assert_called_once()
+        self.assertEqual(maybe_heal.call_args.args[1], "Prometheus scrape target is down")
+
 if __name__ == '__main__':
     unittest.main()

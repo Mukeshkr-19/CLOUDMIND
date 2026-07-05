@@ -58,7 +58,7 @@ Recommended safeguards:
 
 ## InfraMirror Webhook Token
 
-InfraMirror rejects `/whisper` requests unless they include the configured `WHISPER_TOKEN` as a bearer token, `X-CloudMind-Token` header, or trusted query token. Rotate `WHISPER_TOKEN` whenever it is exposed, and keep it only in `.env`.
+InfraMirror rejects `/whisper` requests unless they include the configured `WHISPER_TOKEN` as a bearer token or `X-CloudMind-Token` header. Rotate `WHISPER_TOKEN` whenever it is exposed, and keep it only in `.env`.
 
 ## Dependency Hygiene
 

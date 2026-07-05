@@ -63,8 +63,10 @@ def _authorized_request() -> bool:
     auth = request.headers.get("Authorization", "")
     header_token = request.headers.get("X-CloudMind-Token", "")
     bearer = auth.removeprefix("Bearer ").strip() if auth.startswith("Bearer ") else ""
-    query_token = request.args.get("token", "")
-    return token in {bearer, header_token, query_token}
+    return token in {bearer, header_token}
+
+def _max_value(series) -> float:
+    return max((value for _, value in series), default=None)
 
 def _service_container(service: str):
     docker_client = _docker_client()
@@ -158,16 +160,18 @@ def _diagnose(service: str):
     time.sleep(1)
     cpu_q   = f'service_cpu_percent{{service="{service}"}}'
     req_q   = f'rate(service_requests_total{{service="{service}"}}[1m])'
-    
     lat_q   = f'service_latency_ms{{service="{service}"}}'
+    up_q    = f'up{{job="{service}"}}'
 
     cpu   = _prom_query(cpu_q)
     rrate = _prom_query(req_q)
     lat   = _prom_query(lat_q)
+    up    = _prom_query(up_q)
 
-    cpu_v   = cpu[0][1] if cpu else None
-    rrate_v = rrate[0][1] if rrate else None
-    lat_v   = lat[0][1] if lat else None
+    cpu_v   = _max_value(cpu)
+    rrate_v = _max_value(rrate)
+    lat_v   = _max_value(lat)
+    up_v    = _max_value(up)
 
     if lat_v is None:
         lat_v = LAT_PAIN_MS if cpu_v and cpu_v >= CPU_HARD else 80
@@ -176,6 +180,10 @@ def _diagnose(service: str):
     # Checks
     trigger_heal = False
     reason = ""
+
+    if up_v == 0:
+        trigger_heal = True
+        reason = "Prometheus scrape target is down"
 
     if cpu_v is not None and cpu_v >= CPU_HARD:
         trigger_heal = True
@@ -219,6 +227,8 @@ def interpret_metrics(service, metrics_text):
                     break
 
     if cpu is None:
+        print(f"[⚠️] No CPU metric found for {service}; checking Prometheus target state")
+        _diagnose(service)
         return
 
     if cpu < 50:

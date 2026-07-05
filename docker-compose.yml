@@ -112,7 +112,7 @@ services:
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - sed "s|__WHISPER_TOKEN__|$${WHISPER_TOKEN}|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
+      - python3 -c 'import os, pathlib; src=pathlib.Path("/etc/alertmanager/alertmanager.yml"); pathlib.Path("/tmp/alertmanager.yml").write_text(src.read_text().replace("__WHISPER_TOKEN__", os.environ["WHISPER_TOKEN"]))' && /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
     environment:
       WHISPER_TOKEN: "${WHISPER_TOKEN:?Set WHISPER_TOKEN in .env before starting CloudMind}"
     volumes:
