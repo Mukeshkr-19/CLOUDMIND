@@ -157,7 +157,6 @@ def _maybe_heal(service: str, reason: str):
 
 def _diagnose(service: str):
     """Pulls quick signals from Prometheus and prints a diagnostic line."""
-    time.sleep(1)
     cpu_q   = f'service_cpu_percent{{service="{service}"}}'
     req_q   = f'rate(service_requests_total{{service="{service}"}}[1m])'
     lat_q   = f'service_latency_ms{{service="{service}"}}'

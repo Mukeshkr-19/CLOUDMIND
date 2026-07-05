@@ -1,9 +1,11 @@
 import unittest
 import sys
 import os
+import tempfile
 
 # Add parent directory to sys.path so we can import microservices
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+os.environ.setdefault("SHARED_DATA_DIR", tempfile.mkdtemp(prefix="cloudmind-test-shared-"))
 
 from microservices.api.service import app as api_app
 from microservices.auth.service import app as auth_app
