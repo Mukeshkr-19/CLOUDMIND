@@ -67,7 +67,7 @@ graph TD
 CloudMind shows the difference between scaling and healing:
 
 - **Horizontal Scaling Simulation:** As CPU rises, the dashboard can show active replicas scaling from `1 Pod` toward `3 Pods`.
-- **Auto-Remediation:** When a service crosses the critical threshold, InfraMirror can generate an incident dialogue and restart the affected container.
+- **Auto-Remediation:** Prometheus marks elevated CPU at `70%` and critical CPU at `85%`; InfraMirror can generate an incident dialogue and restart the affected container when critical signals appear.
 
 The pattern mirrors real SRE thinking: detect, explain, act, and preserve incident context.
 

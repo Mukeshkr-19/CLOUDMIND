@@ -28,6 +28,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Guard private env files
+        run: |
+          if git ls-files --error-unmatch .env '.env.*' ':!.env.example' >/dev/null 2>&1; then
+            echo "Private env files must not be tracked."
+            exit 1
+          fi
+
       - name: Compile Python sources
         run: python -m compileall microservices inframirror tests
 
@@ -37,4 +44,5 @@ jobs:
       - name: Validate Docker Compose config
         env:
           WHISPER_TOKEN: ci-whisper-token
+          GRAFANA_ADMIN_PASSWORD: ci-grafana-password
         run: docker compose config --quiet

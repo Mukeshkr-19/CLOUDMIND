@@ -74,7 +74,7 @@ Review dependency updates in `requirements.txt` and Dockerfiles before rebuildin
 
 ## Grafana Credentials
 
-Grafana defaults to `admin` / `admin` through `.env.example` so a fresh stack can start without manual setup. Override `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` in `.env` before running CloudMind anywhere persistent or shared.
+CloudMind requires `GRAFANA_ADMIN_PASSWORD` before Compose will start Grafana. Keep it in `.env`, rotate it if exposed, and do not reuse the placeholder from `.env.example`.
 
 ## Reporting
 
