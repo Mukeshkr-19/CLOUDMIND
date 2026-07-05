@@ -102,7 +102,7 @@ This rebuilds the services and starts the full CloudMind stack in the background
 - **Prometheus Console:** [http://127.0.0.1:9090](http://127.0.0.1:9090)
 - **Alertmanager Console:** [http://127.0.0.1:9093](http://127.0.0.1:9093)
 - **Grafana Panel:** [http://127.0.0.1:3000](http://127.0.0.1:3000)
-  Default credentials: `admin` / `admin`
+  Use `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` from your `.env`.
 - **InfraMirror Webhook:** [http://127.0.0.1:5055/whisper](http://127.0.0.1:5055/whisper)
 
 ### 3. Stop the Cluster
@@ -186,7 +186,7 @@ GEMINI_API_KEY=your_gemini_key
 DISCORD_WEBHOOK_URL=your_discord_webhook
 WHISPER_TOKEN=your_long_random_webhook_token
 GRAFANA_ADMIN_USER=admin
-GRAFANA_ADMIN_PASSWORD=change_this_password
+GRAFANA_ADMIN_PASSWORD=change_this_grafana_password
 ```
 
 Restart the stack:
