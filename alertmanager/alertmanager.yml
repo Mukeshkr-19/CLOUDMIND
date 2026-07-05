@@ -8,8 +8,19 @@ route:
   group_interval: 30s
   repeat_interval: 5m
 
+inhibit_rules:
+  - source_matchers:
+      - alertname="ServiceDown"
+    target_matchers:
+      - alertname=~"ElevatedCPULoad|CriticalCPULoad|HighResponseLatency"
+    equal: ['service']
+
 receivers:
   - name: cloudmind-whisper
     webhook_configs:
       - url: http://inframirror:5055/whisper
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: __WHISPER_TOKEN__
         send_resolved: false

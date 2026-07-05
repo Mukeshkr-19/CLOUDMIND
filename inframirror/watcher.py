@@ -32,6 +32,7 @@ SERVICE_BY_INSTANCE = {
 PROM_URL  = os.getenv("PROM_URL", "http://prometheus:9090")
 HEALING   = os.getenv("HEALING_ENABLED", "false").lower() == "true"
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+WHISPER_TOKEN = os.getenv("WHISPER_TOKEN", "").strip()
 
 # heuristics
 CPU_SOFT      = float(os.getenv("CPU_SOFT_THRESHOLD", "70"))
@@ -44,6 +45,7 @@ INCIDENT_DIALOGUE_COOLDOWN_SEC = int(os.getenv("INCIDENT_DIALOGUE_COOLDOWN_SEC",
 client = None
 _last_heal = {}  # service -> datetime
 _last_dialogue = {}  # service -> datetime
+state_lock = threading.Lock()
 
 def _docker_client():
     global client
@@ -53,6 +55,16 @@ def _docker_client():
 
 def _current_webhook() -> str:
     return os.getenv("DISCORD_WEBHOOK_URL", "").strip()
+
+def _authorized_request() -> bool:
+    token = os.getenv("WHISPER_TOKEN", WHISPER_TOKEN).strip()
+    if not token:
+        return False
+    auth = request.headers.get("Authorization", "")
+    header_token = request.headers.get("X-CloudMind-Token", "")
+    bearer = auth.removeprefix("Bearer ").strip() if auth.startswith("Bearer ") else ""
+    query_token = request.args.get("token", "")
+    return token in {bearer, header_token, query_token}
 
 def _service_container(service: str):
     docker_client = _docker_client()
@@ -71,11 +83,12 @@ def _service_container(service: str):
         return None
 
 def _should_emit_dialogue(service: str, now: datetime) -> bool:
-    last = _last_dialogue.get(service)
-    if last and (now - last) < timedelta(seconds=INCIDENT_DIALOGUE_COOLDOWN_SEC):
-        return False
-    _last_dialogue[service] = now
-    return True
+    with state_lock:
+        last = _last_dialogue.get(service)
+        if last and (now - last) < timedelta(seconds=INCIDENT_DIALOGUE_COOLDOWN_SEC):
+            return False
+        _last_dialogue[service] = now
+        return True
 
 def _send_discord_embed(payload: dict):
     webhook = _current_webhook()
@@ -170,7 +183,8 @@ def _diagnose(service: str):
 
     if trigger_heal:
         now = datetime.now(timezone.utc)
-        last = _last_heal.get(service)
+        with state_lock:
+            last = _last_heal.get(service)
         if last and (now - last) < timedelta(seconds=COOLDOWN_SEC):
             print(f"[⏳] Healing cooldown active for {service} (skipping action)")
             if _should_emit_dialogue(service, now):
@@ -189,7 +203,8 @@ def _diagnose(service: str):
         if HEALING:
             success = _maybe_heal(service, reason)
             if success:
-                _last_heal[service] = now
+                with state_lock:
+                    _last_heal[service] = now
         else:
             print(f"[💊] Healing simulated (HEALING_ENABLED=false) for {service}: {reason}")
 
@@ -254,6 +269,9 @@ app = Flask(__name__)
 @app.route("/whisper", methods=["POST"])
 def receive_whisper_alert():
     """Receives Prometheus alert webhook callbacks and triggers AI remediation."""
+    if not _authorized_request():
+        return jsonify({"status": "rejected", "reason": "unauthorized"}), 401
+
     data = request.get_json(silent=True) or {}
     print(f"\n[🚨 Alert Webhook] Received telemetry alert: {json.dumps(data)}")
 
@@ -295,7 +313,8 @@ def receive_whisper_alert():
 def _process_whisper_alert(service: str, cpu: float, latency: float):
     """Runs slower dialogue + healing work away from the webhook response path."""
     now = datetime.now(timezone.utc)
-    last = _last_heal.get(service)
+    with state_lock:
+        last = _last_heal.get(service)
     if last and (now - last) < timedelta(seconds=COOLDOWN_SEC):
         print(f"[⏳] Webhook healing cooldown active for {service}")
         if _should_emit_dialogue(service, now):
@@ -314,7 +333,8 @@ def _process_whisper_alert(service: str, cpu: float, latency: float):
     if HEALING:
         success = _maybe_heal(service, f"Webhook Alert: CPU={cpu}% Latency={latency}ms")
         if success:
-            _last_heal[service] = now
+            with state_lock:
+                _last_heal[service] = now
     else:
         print(f"[💊] Webhook Healing simulated for {service}")
 

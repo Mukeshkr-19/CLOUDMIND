@@ -21,6 +21,11 @@ def _send_discord_embed(payload: dict, webhook_url: str = None):
     except Exception as e:
         print(f"[❌] Discord Webhook error: {e}")
 
+def _discord_field(value: str, limit: int = 1024) -> str:
+    if len(value) <= limit:
+        return value
+    return value[:limit - 14].rstrip() + "\n...[truncated]"
+
 def _call_gemini(prompt: str, gemini_key: str = None) -> str:
     key = (gemini_key if gemini_key is not None else GEMINI_KEY).strip()
     if not key:
@@ -310,7 +315,7 @@ def trigger_incident_dialogue(service: str, cpu: float, latency: float, gemini_k
             "auth": 1096065        # Green #10B981
         }
         color = colors.get(service, 12616956)
-        discord_dialogue = dialogue
+        discord_dialogue = _discord_field(dialogue)
         
         payload = {
             "embeds": [{

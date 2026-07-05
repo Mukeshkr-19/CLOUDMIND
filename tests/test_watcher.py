@@ -98,8 +98,18 @@ class TestSREWatcherAndEngine(unittest.TestCase):
             }],
         }
 
-        with patch.object(watcher, "_process_whisper_alert") as process_alert:
+        with patch.dict(os.environ, {"WHISPER_TOKEN": "test-token"}), patch.object(watcher, "_process_whisper_alert") as process_alert:
             response = watcher.app.test_client().post("/whisper", json=payload)
+
+        self.assertEqual(response.status_code, 401)
+        process_alert.assert_not_called()
+
+        with patch.dict(os.environ, {"WHISPER_TOKEN": "test-token"}), patch.object(watcher, "_process_whisper_alert") as process_alert:
+            response = watcher.app.test_client().post(
+                "/whisper",
+                json=payload,
+                headers={"Authorization": "Bearer test-token"},
+            )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["reason"], "alert resolved")

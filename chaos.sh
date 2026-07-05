@@ -25,13 +25,17 @@ get_port() {
         "database") echo 5052 ;;
         "cache") echo 5053 ;;
         "auth") echo 5054 ;;
+        *) return 1 ;;
     esac
 }
 
 post_json() {
     declare url=$1
     declare response
-    response=$(curl -s -X POST "$url")
+    if ! response=$(curl -fsS -X POST "$url" 2>&1); then
+        echo -e "${RED}[x] Request failed: $response${NC}"
+        return 1
+    fi
     printf "%s" "$response" | python3 -m json.tool 2>/dev/null || printf "%s\n" "$response"
 }
 
@@ -44,7 +48,11 @@ header() {
 
 trigger_stress() {
     declare service=$1
-    declare port=$(get_port "$service")
+    declare port
+    if ! port=$(get_port "$service"); then
+        echo -e "${RED}[x] Unknown service: $service${NC}"
+        return 1
+    fi
     echo -e "\n${RED}[🔥] Injecting chaos into $service (Port $port)...${NC}"
     post_json "http://127.0.0.1:$port/stress"
     echo -e "\n${GREEN}[✓] Outage successfully initiated. Monitoring telemetry...${NC}"
@@ -53,7 +61,11 @@ trigger_stress() {
 
 trigger_heal() {
     declare service=$1
-    declare port=$(get_port "$service")
+    declare port
+    if ! port=$(get_port "$service"); then
+        echo -e "${RED}[x] Unknown service: $service${NC}"
+        return 1
+    fi
     echo -e "\n${GREEN}[🩹] Injecting manual remediation into $service (Port $port)...${NC}"
     post_json "http://127.0.0.1:$port/heal"
     echo -e "\n${GREEN}[✓] Heal signal successfully sent.${NC}"

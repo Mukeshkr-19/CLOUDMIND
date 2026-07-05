@@ -10,6 +10,7 @@ Sensitive values include:
 
 - `GEMINI_API_KEY`
 - `DISCORD_WEBHOOK_URL`
+- `WHISPER_TOKEN`
 - Any future cloud provider credentials, tokens, or webhook URLs
 
 Use `.env.example` as the template and keep real values in `.env`, which is ignored by Git.
@@ -54,6 +55,10 @@ Recommended safeguards:
 - Use a dedicated Discord channel for infrastructure alerts.
 - Rotate the webhook if it appears in logs, screenshots, issues, pull requests, or chat.
 - Delete the webhook when the channel is no longer needed.
+
+## InfraMirror Webhook Token
+
+InfraMirror rejects `/whisper` requests unless they include the configured `WHISPER_TOKEN` as a bearer token, `X-CloudMind-Token` header, or trusted query token. Rotate `WHISPER_TOKEN` whenever it is exposed, and keep it only in `.env`.
 
 ## Dependency Hygiene
 

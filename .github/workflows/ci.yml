@@ -35,4 +35,6 @@ jobs:
         run: python -m unittest discover -s tests
 
       - name: Validate Docker Compose config
+        env:
+          WHISPER_TOKEN: ci-whisper-token
         run: docker compose config --quiet

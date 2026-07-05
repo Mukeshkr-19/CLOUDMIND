@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, render_template_string
+from flask import Flask, jsonify, request, render_template_string, g
 from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST, CollectorRegistry
 import psutil, random, threading, time, os, json, fcntl, tempfile
 
@@ -8,10 +8,21 @@ app = Flask(__name__)
 
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    origin = request.headers.get('Origin')
+    allowed = {item.strip() for item in os.getenv('CLOUDMIND_ALLOWED_ORIGINS', 'http://127.0.0.1:5050').split(',') if item.strip()}
+    if origin in allowed:
+        response.headers.add('Access-Control-Allow-Origin', origin)
+        response.headers.add('Vary', 'Origin')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-CloudMind-Token')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+
+    if request.endpoint not in {"metrics", "get_dialogues"}:
+        elapsed_ms = (time.perf_counter() - getattr(g, "request_start", time.perf_counter())) * 1000
+        LATENCY.labels(service=SERVICE_NAME).set(elapsed_ms)
+        if 200 <= response.status_code < 300:
+            REQUEST_COUNT.labels(service=SERVICE_NAME).inc()
     return response
+
 
 # Prometheus metrics
 REQUEST_COUNT = Counter('service_requests_total', 'Total number of requests', ['service'], registry=registry)
@@ -28,27 +39,25 @@ normal_latency_min = 50
 normal_latency_max = 190
 stressed_latency_min = 350
 stressed_latency_max = 450
-stressed_cpu_min = 86.0
-stressed_cpu_max = 97.0
-DIALOGUE_DIR = "/app/shared"
+max_stress_workers = 2
+stress_lock = threading.Lock()
+stress_event = threading.Event()
+stress_worker_count = 0
+DIALOGUE_DIR = os.getenv("SHARED_DATA_DIR", "/app/shared")
 DIALOGUE_PATH = os.path.join(DIALOGUE_DIR, "dialogues.json")
 DIALOGUE_LOCK_PATH = os.path.join(DIALOGUE_DIR, "dialogues.lock")
 
 @app.before_request
 def track_request():
-    if request.endpoint not in {"metrics", "get_dialogues"}:
-        REQUEST_COUNT.labels(service=SERVICE_NAME).inc()
+    g.request_start = time.perf_counter()
 
 def current_latency():
-    if is_stressed:
+    if stress_event.is_set():
         return random.randint(stress_latency_min, stress_latency_max)
     return random.randint(normal_latency_min, normal_latency_max)
 
-def current_cpu(interval=0.05):
-    cpu = psutil.cpu_percent(interval=interval)
-    if is_stressed and cpu < 80:
-        return random.uniform(stressed_cpu_min, stressed_cpu_max)
-    return cpu
+def current_cpu(interval=None):
+    return psutil.cpu_percent(interval=interval)
 
 def _dialogue_lock():
     os.makedirs(DIALOGUE_DIR, exist_ok=True)
@@ -77,11 +86,21 @@ def _write_dialogue_history(history):
             os.unlink(tmp_path)
 
 def cpu_spike_worker():
-    global is_stressed
-    while is_stressed:
-        for _ in range(50000):
-            pass
-        time.sleep(0.001)
+    global stress_worker_count
+    try:
+        while stress_event.is_set():
+            for _ in range(50000):
+                pass
+            time.sleep(0.001)
+    finally:
+        with stress_lock:
+            stress_worker_count = max(0, stress_worker_count - 1)
+
+def start_stress_workers():
+    global stress_worker_count
+    while stress_worker_count < max_stress_workers:
+        threading.Thread(target=cpu_spike_worker, daemon=True).start()
+        stress_worker_count += 1
 
 @app.route("/")
 def dashboard():
@@ -988,29 +1007,28 @@ def metrics():
     cpu = current_cpu()
     CPU_USAGE.labels(service=SERVICE_NAME).set(cpu)
     
-    # Calculate response latency
-    latency = current_latency()
-    LATENCY.labels(service=SERVICE_NAME).set(latency)
-    
     return generate_latest(registry), 200, {'Content-Type': CONTENT_TYPE_LATEST}
 
-@app.route("/stress", methods=["GET", "POST"])
+@app.route("/stress", methods=["POST"])
 def trigger_stress():
     global is_stressed, stress_latency_min, stress_latency_max
-    if not is_stressed:
-        is_stressed = True
-        stress_latency_min = stressed_latency_min
-        stress_latency_max = stressed_latency_max
-        for _ in range(2):
-            threading.Thread(target=cpu_spike_worker, daemon=True).start()
+    with stress_lock:
+        if not is_stressed:
+            is_stressed = True
+            stress_event.set()
+            stress_latency_min = stressed_latency_min
+            stress_latency_max = stressed_latency_max
+            start_stress_workers()
     return jsonify({"status": "stressed", "service": SERVICE_NAME, "message": "Chaos injected! CPU load is rising."})
 
 @app.route("/heal", methods=["GET", "POST"])
 def trigger_heal():
     global is_stressed, stress_latency_min, stress_latency_max
-    is_stressed = False
-    stress_latency_min = 0
-    stress_latency_max = 0
+    with stress_lock:
+        is_stressed = False
+        stress_event.clear()
+        stress_latency_min = 0
+        stress_latency_max = 0
     return jsonify({"status": "healed", "service": SERVICE_NAME, "message": "Resilience restored. CPU returning to normal."})
 
 @app.route("/load")

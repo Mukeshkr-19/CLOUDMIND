@@ -13,6 +13,15 @@ groups:
           description: "Service is unresponsive and cannot be scraped by Prometheus."
 
       # Alert if a service CPU load is critical (crosses 85%)
+      - alert: ElevatedCPULoad
+        expr: service_cpu_percent >= 70
+        for: 10s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated CPU on: {{ $labels.service }}"
+          description: "CPU load on service '{{ $labels.service }}' has exceeded 70%."
+
       - alert: CriticalCPULoad
         expr: service_cpu_percent >= 85
         for: 5s

@@ -184,6 +184,7 @@ Then edit `.env`:
 ```bash
 GEMINI_API_KEY=your_gemini_key
 DISCORD_WEBHOOK_URL=your_discord_webhook
+WHISPER_TOKEN=your_long_random_webhook_token
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=change_this_password
 ```

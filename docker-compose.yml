@@ -1,7 +1,7 @@
 x-microservice-resources: &microservice-resources
   resources:
     limits:
-      cpus: "0.75"
+      cpus: "0.50"
       memory: 256M
     reservations:
       cpus: "0.10"
@@ -86,6 +86,7 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml
+      - prometheus-storage:/prometheus
     ports:
       - "9090:9090"
     depends_on:
@@ -109,11 +110,14 @@ services:
   alertmanager:
     image: prom/alertmanager
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
     command:
-      - "--config.file=/etc/alertmanager/alertmanager.yml"
-      - "--storage.path=/alertmanager"
+      - sed "s|__WHISPER_TOKEN__|$${WHISPER_TOKEN}|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
+    environment:
+      WHISPER_TOKEN: "${WHISPER_TOKEN:?Set WHISPER_TOKEN in .env before starting CloudMind}"
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager-storage:/alertmanager
     ports:
       - "9093:9093"
     deploy:
@@ -194,6 +198,7 @@ services:
       LAT_WARN_MS: "250"
       LAT_PAIN_MS: "350"
       HEALING_COOLDOWN_SEC: "150"
+      WHISPER_TOKEN: "${WHISPER_TOKEN:?Set WHISPER_TOKEN in .env before starting CloudMind}"
       GEMINI_API_KEY: "${GEMINI_API_KEY}"
       DISCORD_WEBHOOK_URL: "${DISCORD_WEBHOOK_URL}"
     volumes:
@@ -211,3 +216,5 @@ services:
 volumes:
   grafana-storage:
   shared-data:
+  prometheus-storage:
+  alertmanager-storage:
