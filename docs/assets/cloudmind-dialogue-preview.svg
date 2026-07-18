@@ -1,0 +1,20 @@
+<svg width="1280" height="520" viewBox="0 0 1280 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="520" rx="24" fill="#050506"/>
+  <rect x="56" y="54" width="1168" height="412" rx="20" fill="#0A0A0C" stroke="white" stroke-opacity="0.1"/>
+  <text x="92" y="106" fill="#EDEDEF" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="800">Inside-Cloud Incident Thread</text>
+  <text x="92" y="142" fill="#8A8F98" font-family="Inter, Arial, sans-serif" font-size="16">Example diagnostic conversation produced by the fallback dialogue engine.</text>
+  <g font-family="Inter, Arial, sans-serif" font-size="18">
+    <rect x="92" y="184" width="1096" height="46" rx="14" fill="#111827"/>
+    <text x="118" y="214" fill="#F59E0B" font-weight="800">Joy - Frontend:</text>
+    <text x="276" y="214" fill="#EDEDEF">Users are waiting on records; keep the page responsive while remediation starts.</text>
+    <rect x="92" y="244" width="1096" height="46" rx="14" fill="#111827"/>
+    <text x="118" y="274" fill="#5E6AD2" font-weight="800">Logic - API:</text>
+    <text x="244" y="274" fill="#EDEDEF">Database latency crossed the critical line; routing pressure is being reduced.</text>
+    <rect x="92" y="304" width="1096" height="46" rx="14" fill="#111827"/>
+    <text x="118" y="334" fill="#8B5CF6" font-weight="800">Memory - Database:</text>
+    <text x="314" y="334" fill="#EDEDEF">Write locks are stacking up; measured latency is above 400ms.</text>
+    <rect x="92" y="364" width="1096" height="46" rx="14" fill="#111827"/>
+    <text x="118" y="394" fill="#10B981" font-weight="800">InfraMirror - SRE:</text>
+    <text x="306" y="394" fill="#EDEDEF">Alert accepted, cooldown checked, remediation action queued.</text>
+  </g>
+</svg>

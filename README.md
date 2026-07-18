@@ -2,11 +2,59 @@
 
 > **"What if your cloud infrastructure could talk in character while it diagnoses and heals itself?"**
 
+[![CloudMind CI](https://github.com/Mukeshkr-19/CLOUDMIND/actions/workflows/ci.yml/badge.svg)](https://github.com/Mukeshkr-19/CLOUDMIND/actions/workflows/ci.yml)
+[![Security Checks](https://github.com/Mukeshkr-19/CLOUDMIND/actions/workflows/security.yml/badge.svg)](https://github.com/Mukeshkr-19/CLOUDMIND/actions/workflows/security.yml)
+![Docker](https://img.shields.io/badge/Docker-Orchestrated-2496ED?logo=docker&logoColor=white)
+![Prometheus](https://img.shields.io/badge/Prometheus-Metrics-E6522C?logo=prometheus&logoColor=white)
+![Grafana](https://img.shields.io/badge/Grafana-Provisioned-F46800?logo=grafana&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.x-3776AB?logo=python&logoColor=white)
+
+![CloudMind banner](docs/assets/cloudmind-banner.svg)
+
 CloudMind is a creative **Dialogic Telemetry & Closed-Loop SRE Auto-Remediation Platform** inspired by the movie *Inside Out*. Instead of staring at silent dashboards and dry alerts, CloudMind maps five microservices to distinct character voices that discuss outages in real time while an InfraMirror watcher monitors metrics and optionally restarts unhealthy containers.
 
 CloudMind brings together **Docker orchestration, Flask microservices, Prometheus metrics, Grafana provisioning, webhook-driven incident handling, shared-volume state, and AI-assisted infrastructure storytelling** into one cohesive SRE observability system.
 
 > **Note:** CloudMind is designed for controlled, operator-owned environments. Its auto-remediation intentionally mounts the Docker socket so the watcher can restart managed CloudMind containers.
+
+---
+
+## 🌟 Why CloudMind Is Different
+
+CloudMind turns infrastructure behavior into a readable incident narrative:
+
+- Engineers get Prometheus telemetry and Grafana panels.
+- Operators get a clear incident trail instead of disconnected alert noise.
+- Each service explains what is hurting from its own role in the system.
+- InfraMirror can receive alert webhooks, generate context, and remediate unhealthy containers.
+- The dashboard preserves incident history through shared-volume state.
+
+That combination makes CloudMind a distinctive SRE observability platform with concrete Docker orchestration, metrics, alert routing, remediation control, and incident memory.
+
+---
+
+## ✅ Verified at a Glance
+
+| Signal | Current Coverage |
+| :--- | :--- |
+| **Microservices** | `5` Flask services with `/status`, `/load`, `/incident`, `/stress`, `/heal`, and `/metrics` |
+| **SRE Watcher** | InfraMirror webhook on `5055` with bearer/header authentication |
+| **Alerting** | Prometheus rules for service availability, elevated CPU, critical CPU, and latency |
+| **Remediation** | Docker-socket restart path with cooldown control and incident persistence |
+| **Tests** | `14` unit tests covering service endpoints, watcher decisions, webhook auth, and fallback dialogue |
+| **CI Gates** | Python compile, unit tests, Compose validation, private-env guard, pip-audit, and Trivy scan |
+
+---
+
+## 🖼️ Visual Tour
+
+![CloudMind dashboard preview](docs/assets/cloudmind-dashboard-preview.svg)
+
+The operator view combines service health, chaos controls, active telemetry, and incident dialogue in one place.
+
+![CloudMind incident dialogue preview](docs/assets/cloudmind-dialogue-preview.svg)
+
+Incident threads show the affected service, peer-service context, and the InfraMirror SRE action line.
 
 ---
 
@@ -158,14 +206,10 @@ Expected behavior: `/whisper` returns `202 Accepted` quickly, then dialogue gene
 ## ✅ Run the Test Suite
 
 ```bash
-python3 -m venv venv
-venv/bin/pip install -r requirements.txt
-venv/bin/python -m unittest discover -s tests
-python3 -m compileall microservices inframirror tests
-docker compose config --quiet
+make verify
 ```
 
-The tests cover the Flask service endpoints and the InfraMirror dialogue fallback path.
+`make verify` creates the virtual environment when needed, installs dependencies, compiles Python modules, runs the unit tests, and validates the Docker Compose configuration.
 
 GitHub Actions also runs Python compilation, unit tests, Docker Compose validation, and secret scanning on pushed branches and pull requests.
 
@@ -210,9 +254,18 @@ Keep `.env` private. Never commit real secrets.
 | `prometheus/alerts.yml` | Alert rule definitions |
 | `alertmanager/alertmanager.yml` | Prometheus alert routing into InfraMirror |
 | `grafana/provisioning/` | Provisioned Grafana dashboards, datasource, and alerting config |
+| `docs/assets/` | README banner and interface preview assets |
 | `tests/` | Unit tests for services and watcher dialogue behavior |
 | `chaos.sh` | Interactive chaos and healing script |
 | `SECURITY.md` | Secret handling, rotation, Docker socket, and webhook guidance |
+
+---
+
+## 🏷️ Repository Topics
+
+Suggested GitHub topics:
+
+`docker`, `prometheus`, `grafana`, `sre`, `observability`, `flask`, `auto-remediation`, `devops`, `alertmanager`, `site-reliability-engineering`
 
 ---
 
@@ -224,17 +277,3 @@ Keep `.env` private. Never commit real secrets.
 - Override Grafana credentials in `.env` before running CloudMind in a shared environment.
 
 See [SECURITY.md](SECURITY.md) for credential rotation and operational safeguards.
-
----
-
-## 🌟 Why CloudMind Is Different
-
-CloudMind is an observability system that turns infrastructure behavior into a readable incident narrative:
-
-- Engineers get telemetry.
-- Operators get a clear incident trail.
-- The system explains what is hurting.
-- The watcher can act.
-- The dashboard keeps the incident memory.
-
-That combination makes CloudMind a distinctive SRE observability platform with concrete Docker orchestration, metrics, alert routing, remediation control, and incident history.
