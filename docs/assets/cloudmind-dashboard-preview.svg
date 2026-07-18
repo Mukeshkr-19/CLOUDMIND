@@ -1,79 +1,127 @@
-<svg width="1280" height="760" viewBox="0 0 1280 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="1400" height="760" viewBox="0 0 1400 760" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">CloudMind operator console preview</title>
+  <desc id="desc">A cloud infrastructure dashboard preview with service health cards, telemetry panels, alert routing, and incident dialogue.</desc>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1280" y2="760" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#020203"/>
-      <stop offset="1" stop-color="#0B1020"/>
+    <linearGradient id="page" x1="0" y1="0" x2="1400" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#050A13"/>
+      <stop offset="0.55" stop-color="#071522"/>
+      <stop offset="1" stop-color="#0D1731"/>
     </linearGradient>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#000000" flood-opacity="0.45"/>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#0D1E31"/>
+      <stop offset="1" stop-color="#07101C"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="16" stdDeviation="22" flood-color="#000000" flood-opacity="0.35"/>
     </filter>
+    <style>
+      .label { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+      .panel { fill: url(#panel); stroke: #20364C; stroke-width: 1.4; }
+      .muted { fill: #8CA2B5; }
+      .line { stroke: #233B54; stroke-width: 2; stroke-linecap: round; }
+    </style>
   </defs>
-  <rect width="1280" height="760" rx="24" fill="url(#bg)"/>
-  <text x="56" y="74" fill="#EDEDEF" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="800">CloudMind Control Console</text>
-  <text x="56" y="110" fill="#8A8F98" font-family="Inter, Arial, sans-serif" font-size="18">Five microservices, Prometheus telemetry, Alertmanager routing, and InfraMirror remediation.</text>
 
-  <g filter="url(#shadow)">
-    <rect x="56" y="146" width="1168" height="248" rx="18" fill="#090A0D" stroke="white" stroke-opacity="0.1"/>
-    <text x="84" y="190" fill="#EDEDEF" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="700">Service Health</text>
-    <g>
-      <rect x="84" y="224" width="196" height="120" rx="14" fill="#111827" stroke="#F59E0B" stroke-opacity="0.42"/>
-      <circle cx="116" cy="260" r="12" fill="#F59E0B"/>
-      <text x="140" y="267" fill="#EDEDEF" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Frontend</text>
-      <text x="104" y="306" fill="#8A8F98" font-family="Inter, Arial, sans-serif" font-size="13">CPU 22% | 118ms</text>
-      <rect x="104" y="320" width="128" height="8" rx="4" fill="#F59E0B" fill-opacity="0.55"/>
+  <rect width="1400" height="760" rx="34" fill="url(#page)"/>
+  <circle cx="187" cy="139" r="230" fill="#00E0A4" opacity="0.08"/>
+  <circle cx="1148" cy="114" r="290" fill="#6B83FF" opacity="0.12"/>
+
+  <g transform="translate(52 44)">
+    <text class="label" x="0" y="0" fill="#F4FAFF" font-size="34" font-weight="900">CloudMind Control Plane</text>
+    <text class="label" x="0" y="36" fill="#A9B9C8" font-size="16" font-weight="600">Five services, telemetry ingestion, alert routing, and closed-loop remediation</text>
+  </g>
+
+  <g transform="translate(52 112)" filter="url(#shadow)">
+    <rect class="panel" x="0" y="0" width="292" height="598" rx="22"/>
+    <text class="label" x="24" y="40" fill="#E9F5FF" font-size="20" font-weight="850">Service Fleet</text>
+    <text class="label muted" x="24" y="67" font-size="13" font-weight="650">container health and endpoint surface</text>
+
+    <g transform="translate(24 102)">
+      <rect x="0" y="0" width="244" height="72" rx="16" fill="#0A2B25" stroke="#16F2B3" stroke-opacity="0.55"/>
+      <circle cx="31" cy="36" r="9" fill="#16F2B3"/>
+      <text class="label" x="54" y="31" fill="#E8FFF8" font-size="16" font-weight="850">Frontend</text>
+      <text class="mono" x="54" y="53" fill="#95DDCE" font-size="12">5050 /metrics</text>
     </g>
-    <g>
-      <rect x="304" y="224" width="196" height="120" rx="14" fill="#111827" stroke="#5E6AD2" stroke-opacity="0.48"/>
-      <circle cx="336" cy="260" r="12" fill="#5E6AD2"/>
-      <text x="360" y="267" fill="#EDEDEF" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">API</text>
-      <text x="324" y="306" fill="#8A8F98" font-family="Inter, Arial, sans-serif" font-size="13">CPU 28% | 96ms</text>
-      <rect x="324" y="320" width="118" height="8" rx="4" fill="#5E6AD2" fill-opacity="0.6"/>
+    <g transform="translate(24 190)">
+      <rect x="0" y="0" width="244" height="72" rx="16" fill="#0B2138" stroke="#78B9FF" stroke-opacity="0.55"/>
+      <circle cx="31" cy="36" r="9" fill="#78B9FF"/>
+      <text class="label" x="54" y="31" fill="#E8F3FF" font-size="16" font-weight="850">API Gateway</text>
+      <text class="mono" x="54" y="53" fill="#9BCBFF" font-size="12">5051 /load</text>
     </g>
-    <g>
-      <rect x="524" y="224" width="196" height="120" rx="14" fill="#111827" stroke="#8B5CF6" stroke-opacity="0.48"/>
-      <circle cx="556" cy="260" r="12" fill="#8B5CF6"/>
-      <text x="580" y="267" fill="#EDEDEF" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Database</text>
-      <text x="544" y="306" fill="#8A8F98" font-family="Inter, Arial, sans-serif" font-size="13">CPU 91% | 401ms</text>
-      <rect x="544" y="320" width="154" height="8" rx="4" fill="#EF4444" fill-opacity="0.72"/>
+    <g transform="translate(24 278)">
+      <rect x="0" y="0" width="244" height="72" rx="16" fill="#2C1F08" stroke="#FFBF4D" stroke-opacity="0.55"/>
+      <circle cx="31" cy="36" r="9" fill="#FFBF4D"/>
+      <text class="label" x="54" y="31" fill="#FFF1CF" font-size="16" font-weight="850">Database</text>
+      <text class="mono" x="54" y="53" fill="#F3CA78" font-size="12">5052 /incident</text>
     </g>
-    <g>
-      <rect x="744" y="224" width="196" height="120" rx="14" fill="#111827" stroke="#EC4899" stroke-opacity="0.48"/>
-      <circle cx="776" cy="260" r="12" fill="#EC4899"/>
-      <text x="800" y="267" fill="#EDEDEF" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Cache</text>
-      <text x="764" y="306" fill="#8A8F98" font-family="Inter, Arial, sans-serif" font-size="13">CPU 18% | 44ms</text>
-      <rect x="764" y="320" width="92" height="8" rx="4" fill="#EC4899" fill-opacity="0.6"/>
+    <g transform="translate(24 366)">
+      <rect x="0" y="0" width="244" height="72" rx="16" fill="#181638" stroke="#A58BFF" stroke-opacity="0.55"/>
+      <circle cx="31" cy="36" r="9" fill="#A58BFF"/>
+      <text class="label" x="54" y="31" fill="#F0ECFF" font-size="16" font-weight="850">Cache</text>
+      <text class="mono" x="54" y="53" fill="#BCAEFF" font-size="12">5053 /stress</text>
     </g>
-    <g>
-      <rect x="964" y="224" width="196" height="120" rx="14" fill="#111827" stroke="#10B981" stroke-opacity="0.48"/>
-      <circle cx="996" cy="260" r="12" fill="#10B981"/>
-      <text x="1020" y="267" fill="#EDEDEF" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Auth</text>
-      <text x="984" y="306" fill="#8A8F98" font-family="Inter, Arial, sans-serif" font-size="13">CPU 16% | 52ms</text>
-      <rect x="984" y="320" width="84" height="8" rx="4" fill="#10B981" fill-opacity="0.6"/>
+    <g transform="translate(24 454)">
+      <rect x="0" y="0" width="244" height="72" rx="16" fill="#32131A" stroke="#FF6B7A" stroke-opacity="0.55"/>
+      <circle cx="31" cy="36" r="9" fill="#FF6B7A"/>
+      <text class="label" x="54" y="31" fill="#FFEAF0" font-size="16" font-weight="850">Auth Manager</text>
+      <text class="mono" x="54" y="53" fill="#FF9CAB" font-size="12">5054 /heal</text>
     </g>
   </g>
 
-  <g filter="url(#shadow)">
-    <rect x="56" y="430" width="560" height="260" rx="18" fill="#090A0D" stroke="white" stroke-opacity="0.1"/>
-    <text x="84" y="474" fill="#EDEDEF" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="700">Incident Dialogue</text>
-    <text x="86" y="522" fill="#8B5CF6" font-family="Fira Code, monospace" font-size="15" font-weight="700">Memory - Database:</text>
-    <text x="246" y="522" fill="#EDEDEF" font-family="Inter, Arial, sans-serif" font-size="15">Write-lock contention detected at 401ms.</text>
-    <text x="86" y="562" fill="#5E6AD2" font-family="Fira Code, monospace" font-size="15" font-weight="700">Logic - API:</text>
-    <text x="206" y="562" fill="#EDEDEF" font-family="Inter, Arial, sans-serif" font-size="15">Routing pressure away from the database.</text>
-    <text x="86" y="602" fill="#C084FC" font-family="Fira Code, monospace" font-size="15" font-weight="700">InfraMirror - SRE:</text>
-    <text x="246" y="602" fill="#EDEDEF" font-family="Inter, Arial, sans-serif" font-size="15">Remediation queued with Docker socket control.</text>
+  <g transform="translate(376 112)" filter="url(#shadow)">
+    <rect class="panel" x="0" y="0" width="522" height="282" rx="22"/>
+    <text class="label" x="24" y="40" fill="#E9F5FF" font-size="20" font-weight="850">Telemetry Stream</text>
+    <text class="label muted" x="24" y="67" font-size="13" font-weight="650">Prometheus scrape signals and alert thresholds</text>
+
+    <g transform="translate(28 104)">
+      <path d="M0 122C52 80 103 94 151 69C204 42 247 23 306 48C360 71 397 101 466 45" stroke="#16F2B3" stroke-width="4" stroke-linecap="round"/>
+      <path d="M0 146C67 143 115 134 166 118C227 98 281 124 332 104C386 84 424 74 466 88" stroke="#78B9FF" stroke-width="4" stroke-linecap="round"/>
+      <line x1="0" y1="154" x2="466" y2="154" class="line"/>
+      <line x1="0" y1="18" x2="0" y2="154" class="line"/>
+      <text class="mono" x="16" y="24" fill="#8CA2B5" font-size="12">cpu</text>
+      <text class="mono" x="410" y="177" fill="#8CA2B5" font-size="12">latency</text>
+    </g>
   </g>
 
-  <g filter="url(#shadow)">
-    <rect x="664" y="430" width="560" height="260" rx="18" fill="#090A0D" stroke="white" stroke-opacity="0.1"/>
-    <text x="692" y="474" fill="#EDEDEF" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="700">Alert Flow</text>
-    <rect x="716" y="526" width="118" height="44" rx="22" fill="#111827" stroke="#10B981" stroke-opacity="0.5"/>
-    <text x="742" y="554" fill="#A7F3D0" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700">Metrics</text>
-    <path d="M840 548 H908" stroke="#8A8F98" stroke-width="2"/>
-    <rect x="914" y="526" width="154" height="44" rx="22" fill="#111827" stroke="#5E6AD2" stroke-opacity="0.5"/>
-    <text x="942" y="554" fill="#C7D2FE" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700">Alertmanager</text>
-    <path d="M1074 548 H1138" stroke="#8A8F98" stroke-width="2"/>
-    <rect x="968" y="608" width="154" height="44" rx="22" fill="#111827" stroke="#C084FC" stroke-opacity="0.5"/>
-    <text x="1004" y="636" fill="#E9D5FF" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700">InfraMirror</text>
-    <path d="M1140 552 C1175 572 1178 622 1124 630" stroke="#8A8F98" stroke-width="2" fill="none"/>
+  <g transform="translate(928 112)" filter="url(#shadow)">
+    <rect class="panel" x="0" y="0" width="420" height="282" rx="22"/>
+    <text class="label" x="24" y="40" fill="#E9F5FF" font-size="20" font-weight="850">Alert Routing</text>
+    <text class="label muted" x="24" y="67" font-size="13" font-weight="650">Prometheus to Alertmanager to InfraMirror</text>
+
+    <g transform="translate(34 112)">
+      <rect x="0" y="0" width="108" height="64" rx="16" fill="#0A2B25" stroke="#16F2B3"/>
+      <text class="label" x="17" y="39" fill="#D9FFF4" font-size="15" font-weight="850">Prometheus</text>
+      <path d="M123 32H166" stroke="#6B83FF" stroke-width="4" stroke-linecap="round"/>
+      <path d="M160 24L170 32L160 40" stroke="#6B83FF" stroke-width="4" stroke-linecap="round"/>
+      <rect x="180" y="0" width="124" height="64" rx="16" fill="#122037" stroke="#78B9FF"/>
+      <text class="label" x="199" y="39" fill="#E7F3FF" font-size="15" font-weight="850">Alertmanager</text>
+      <path d="M242 78V112" stroke="#FFBF4D" stroke-width="4" stroke-linecap="round"/>
+      <path d="M234 106L242 116L250 106" stroke="#FFBF4D" stroke-width="4" stroke-linecap="round"/>
+      <rect x="154" y="130" width="176" height="56" rx="16" fill="#2C1F08" stroke="#FFBF4D"/>
+      <text class="label" x="184" y="164" fill="#FFF1CF" font-size="15" font-weight="850">InfraMirror /whisper</text>
+    </g>
+  </g>
+
+  <g transform="translate(376 424)" filter="url(#shadow)">
+    <rect class="panel" x="0" y="0" width="972" height="286" rx="22"/>
+    <text class="label" x="24" y="40" fill="#E9F5FF" font-size="20" font-weight="850">Incident Timeline</text>
+    <text class="label muted" x="24" y="67" font-size="13" font-weight="650">character dialogue plus SRE remediation context</text>
+
+    <g transform="translate(24 98)">
+      <rect x="0" y="0" width="924" height="48" rx="14" fill="#0B2035" stroke="#20364C"/>
+      <text class="mono" x="18" y="30" fill="#78B9FF" font-size="14" font-weight="800">[Logic - API]</text>
+      <text class="label" x="142" y="30" fill="#E6F3FF" font-size="14">Routing latency is rising. Query pressure is backing up across the gateway.</text>
+    </g>
+    <g transform="translate(24 158)">
+      <rect x="0" y="0" width="924" height="48" rx="14" fill="#2C1F08" stroke="#574017"/>
+      <text class="mono" x="18" y="30" fill="#FFBF4D" font-size="14" font-weight="800">[Memory - DB]</text>
+      <text class="label" x="142" y="30" fill="#FFF2CF" font-size="14">Write-lock contention detected. The cache layer should absorb repeated reads.</text>
+    </g>
+    <g transform="translate(24 218)">
+      <rect x="0" y="0" width="924" height="48" rx="14" fill="#0A2B25" stroke="#1D5B4C"/>
+      <text class="mono" x="18" y="30" fill="#16F2B3" font-size="14" font-weight="800">[InfraMirror]</text>
+      <text class="label" x="142" y="30" fill="#D8FFF4" font-size="14">Critical threshold crossed. Restart queued with cooldown protection enabled.</text>
+    </g>
   </g>
 </svg>

@@ -258,6 +258,7 @@ Keep `.env` private. Never commit real secrets.
 | `tests/` | Unit tests for services and watcher dialogue behavior |
 | `chaos.sh` | Interactive chaos and healing script |
 | `SECURITY.md` | Secret handling, rotation, Docker socket, and webhook guidance |
+| `LICENSE` | MIT license terms |
 
 ---
 
@@ -277,3 +278,9 @@ Suggested GitHub topics:
 - Override Grafana credentials in `.env` before running CloudMind in a shared environment.
 
 See [SECURITY.md](SECURITY.md) for credential rotation and operational safeguards.
+
+---
+
+## 📜 License
+
+CloudMind is released under the [MIT License](LICENSE).
