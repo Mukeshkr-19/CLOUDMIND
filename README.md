@@ -258,16 +258,6 @@ Keep `.env` private. Never commit real secrets.
 | `SECURITY.md` | Secret handling, rotation, Docker socket, and webhook guidance |
 | `LICENSE` | MIT license terms |
 
----
-
-## 🏷️ Repository Topics
-
-Suggested GitHub topics:
-
-`docker`, `prometheus`, `grafana`, `sre`, `observability`, `flask`, `auto-remediation`, `devops`, `alertmanager`, `site-reliability-engineering`
-
----
-
 ## 🔐 Security Notes
 
 - `inframirror` mounts `/var/run/docker.sock`; this is powerful and should be used only in controlled environments.
