@@ -134,7 +134,29 @@ CloudMind works without external APIs by using built-in fallback dialogue script
 - Docker Desktop running.
 - Python 3.x for tests.
 
-### 1. Launch the Cluster
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/Mukeshkr-19/CLOUDMIND.git
+cd CLOUDMIND
+```
+
+### 2. Create Runtime Configuration
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set strong values for:
+
+```bash
+WHISPER_TOKEN=your_long_random_webhook_token
+GRAFANA_ADMIN_PASSWORD=your_grafana_admin_password
+```
+
+`GEMINI_API_KEY` and `DISCORD_WEBHOOK_URL` can stay blank unless you want AI-generated dialogue or Discord incident embeds.
+
+### 3. Launch the Cluster
 
 ```bash
 docker compose up -d --build
@@ -142,7 +164,7 @@ docker compose up -d --build
 
 This rebuilds the services and starts the full CloudMind stack in the background.
 
-### 2. Access the Interfaces
+### 4. Access the Interfaces
 
 - **CloudMind Dashboard:** [http://127.0.0.1:5050](http://127.0.0.1:5050)
 - **Prometheus Console:** [http://127.0.0.1:9090](http://127.0.0.1:9090)
@@ -151,7 +173,7 @@ This rebuilds the services and starts the full CloudMind stack in the background
   Use `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` from your `.env`.
 - **InfraMirror Webhook:** [http://127.0.0.1:5055/whisper](http://127.0.0.1:5055/whisper)
 
-### 3. Stop the Cluster
+### 5. Stop the Cluster
 
 ```bash
 docker compose down
