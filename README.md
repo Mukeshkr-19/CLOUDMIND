@@ -9,8 +9,6 @@
 ![Grafana](https://img.shields.io/badge/Grafana-Provisioned-F46800?logo=grafana&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.x-3776AB?logo=python&logoColor=white)
 
-![CloudMind banner](docs/assets/cloudmind-banner.svg)
-
 CloudMind is a creative **Dialogic Telemetry & Closed-Loop SRE Auto-Remediation Platform** inspired by the movie *Inside Out*. Instead of staring at silent dashboards and dry alerts, CloudMind maps five microservices to distinct character voices that discuss outages in real time while an InfraMirror watcher monitors metrics and optionally restarts unhealthy containers.
 
 CloudMind brings together **Docker orchestration, Flask microservices, Prometheus metrics, Grafana provisioning, webhook-driven incident handling, shared-volume state, and AI-assisted infrastructure storytelling** into one cohesive SRE observability system.
@@ -48,13 +46,13 @@ That combination makes CloudMind a distinctive SRE observability platform with c
 
 ## 🖼️ Visual Tour
 
-![CloudMind dashboard preview](docs/assets/cloudmind-dashboard-preview.svg)
+![CloudMind dashboard](docs/screenshots/cloudmind-dashboard.png)
 
-The operator view combines service health, chaos controls, active telemetry, and incident dialogue in one place.
+Captured from the running CloudMind dashboard: service health, chaos controls, watcher status, and incident dialogue in one operator view.
 
-![CloudMind incident dialogue preview](docs/assets/cloudmind-dialogue-preview.svg)
+![CloudMind incident dialogue](docs/screenshots/cloudmind-incident-dialogue.png)
 
-Incident threads show the affected service, peer-service context, and the InfraMirror SRE action line.
+Captured from an authenticated `/whisper` incident: the database reports lock contention, peer services add context, and InfraMirror records the remediation action.
 
 ---
 
@@ -90,7 +88,7 @@ graph TD
     Cache -.->|/metrics| Prom
     Auth -.->|/metrics| Prom
 
-    Grafana[Grafana Dashboard + Alerts] --> Prom
+    Grafana[Grafana Dashboard] --> Prom
     Prom -->|Alert rules| Alertmanager[Alertmanager]
     Alertmanager -->|Webhook| Watcher
     Watcher[InfraMirror SRE Watcher] -->|Queries telemetry| Prom
@@ -253,8 +251,8 @@ Keep `.env` private. Never commit real secrets.
 | `prometheus/prometheus.yml` | Prometheus scrape configuration |
 | `prometheus/alerts.yml` | Alert rule definitions |
 | `alertmanager/alertmanager.yml` | Prometheus alert routing into InfraMirror |
-| `grafana/provisioning/` | Provisioned Grafana dashboards, datasource, and alerting config |
-| `docs/assets/` | README banner and interface preview assets |
+| `grafana/provisioning/` | Provisioned Grafana dashboard and datasource config |
+| `docs/screenshots/` | Captured dashboard and incident screenshots |
 | `tests/` | Unit tests for services and watcher dialogue behavior |
 | `chaos.sh` | Interactive chaos and healing script |
 | `SECURITY.md` | Secret handling, rotation, Docker socket, and webhook guidance |
