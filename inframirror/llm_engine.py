@@ -1,6 +1,11 @@
 # llm_engine.py – AI Cloud Brain Dialogue Engine & Prompt Orchestration
-import os, requests, json, random, fcntl, tempfile
-from datetime import datetime, timedelta, timezone
+import os
+import fcntl
+import json
+import random
+import tempfile
+import requests
+from datetime import datetime, timezone
 
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 SHARED_DATA_DIR = os.getenv("SHARED_DATA_DIR", "/app/shared")
@@ -342,3 +347,166 @@ def generate_healthy_dialogue(gemini_key: str = None, persist: bool = True) -> s
 
 def generate_incident_dialogue(service: str, cpu: float, latency: float, gemini_key: str = None, persist: bool = True, send_discord: bool = True, webhook_url: str = None) -> str:
     return trigger_incident_dialogue(service, cpu, latency, gemini_key=gemini_key, persist=persist, send_discord=send_discord, webhook_url=webhook_url)
+
+def generate_aiops_incident_dialogue(
+    probable_cause_service: str,
+    diagnosis: str,
+    snapshot_data: dict,
+    policy_decision: dict = None,
+    execution_result: dict = None,
+    recovery_result: dict = None,
+    gemini_key: str = None,
+    persist: bool = True,
+    send_discord: bool = True,
+    webhook_url: str = None,
+) -> str:
+    """Generate truthful AIOps incident dialogue grounded in policy and execution outcomes."""
+    policy_decision = policy_decision or {}
+    execution_result = execution_result or {}
+    recovery_result = recovery_result or {}
+
+    service = probable_cause_service
+    metrics = snapshot_data.get("services", {}).get(service, {})
+    cpu_value = metrics.get("cpu_percent")
+    lat_value = metrics.get("latency_ms")
+    cpu = float(cpu_value) if cpu_value is not None else None
+    latency = float(lat_value) if lat_value is not None else None
+
+    mode = policy_decision.get("mode", "recommend")
+    approved = policy_decision.get("approved", False)
+    action = policy_decision.get("action", "no_action")
+    target = policy_decision.get("target")
+    executed = execution_result.get("executed", False)
+    recovery_status = recovery_result.get("status", "not_executed")
+
+    # Build a truthful SRE line based on actual outcome, not hardcoded success.
+    if mode == "recommend" and approved and action == "restart_service":
+        sre_line = f"**[InfraMirror - SRE]**: \" AIOps recommends restarting `{target}` for {service}; execution deferred to operator approval.\""
+    elif action == "no_action":
+        sre_line = f"**[InfraMirror - SRE]**: \"✅ AIOps assessed {service}; no remediation action required.\""
+    elif not approved:
+        sre_line = f"**[InfraMirror - SRE]**: \"⛔ AIOps action for {service} was denied by policy.\""
+    elif mode == "execute" and executed:
+        if recovery_status == "recovered":
+            sre_line = f"**[InfraMirror - SRE]**: \"♻️ Restarted `{target}` and verified recovery for {service}.\""
+        elif recovery_status == "not_recovered":
+            sre_line = f"**[InfraMirror - SRE]**: \"⚠️ Restarted `{target}` for {service}, but recovery is not yet confirmed.\""
+        else:
+            sre_line = f"**[InfraMirror - SRE]**: \"♻️ Restarted `{target}` for {service}; recovery verification in progress.\""
+    else:
+        sre_line = f"**[InfraMirror - SRE]**: \"🚨 AIOps incident on {service}; no action taken.\""
+
+    cpu_text = f"{cpu:.1f}%" if cpu is not None else "unknown"
+    lat_text = f"{latency:.0f}ms" if latency is not None else "unknown"
+
+    prompt = f"""You are the AI Orchestrator for 'CloudMind'. An AIOps diagnosis engine identified the following probable cause:
+
+Probable cause service: {probable_cause_service}
+Diagnosis: {diagnosis}
+Policy outcome: {policy_decision.get('reason', 'Policy evaluated')}
+Execution outcome: {execution_result.get('details', 'No execution')}
+Recovery outcome: {recovery_status}
+
+Write a short, engaging, 5-line Slack-style chat dialogue where ALL 5 services react in their character voices. Keep the same bracketed tag format required by the parser:
+**[Joy - Frontend]**: "Dialogue"
+**[Logic - API]**: "Dialogue"
+**[Memory - Database]**: "Dialogue"
+**[Swift - Cache]**: "Dialogue"
+**[Gatekeeper - Auth]**: "Dialogue"
+
+Respond strictly in English with no headings or translations. Do not include an SRE resolution line; it will be appended automatically."""
+
+    dialogue = ""
+    key = (gemini_key if gemini_key is not None else GEMINI_KEY).strip()
+    if key:
+        dialogue = _call_gemini(prompt, key)
+    if not dialogue:
+        # Truthful fallback: no false "executing" claims for recommend/no_action.
+        dialogue = _generate_aiops_fallback_dialogue(service, cpu_text, lat_text, policy_decision, execution_result, recovery_result)
+    else:
+        dialogue = dialogue.strip()
+        if "**[InfraMirror - SRE]**" not in dialogue:
+            dialogue = dialogue + "\n" + sre_line
+
+    print(dialogue)
+    if persist:
+        _save_dialogue_to_volume(dialogue)
+
+    if send_discord and _current_webhook(webhook_url):
+        colors = {
+            "frontend": 16105995,
+            "api": 6187730,
+            "database": 8945820,
+            "cache": 15485081,
+            "auth": 1096065,
+        }
+        color = colors.get(service, 12616956)
+        discord_dialogue = _discord_field(dialogue)
+        payload = {
+            "embeds": [{
+                "title": f"🚨 [AIOps INCIDENT] SERVICE: {service.upper()} DIAGNOSED",
+                "description": f"AIOps engine identified probable cause on `{service}`.",
+                "color": color,
+                "fields": [
+                    {"name": "Probable Cause", "value": _discord_field(diagnosis), "inline": False},
+                    {"name": "📈 CPU Load", "value": f"`{cpu_text}`", "inline": True},
+                    {"name": "️ Response Latency", "value": f"`{lat_text}`", "inline": True},
+                    {"name": "🎬 Inside-Cloud Telemetry dialogue", "value": discord_dialogue},
+                ],
+                "footer": {"text": "SRE AIOps Engine | Automated Remediation Pending"},
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }]
+        }
+        _send_discord_embed(payload, webhook_url=webhook_url)
+    return dialogue
+
+
+def _generate_aiops_fallback_dialogue(
+    service: str,
+    cpu_text: str,
+    lat_text: str,
+    policy_decision: dict,
+    execution_result: dict,
+    recovery_result: dict,
+) -> str:
+    mode = policy_decision.get("mode", "recommend") if policy_decision else "recommend"
+    approved = policy_decision.get("approved", False) if policy_decision else False
+    action = policy_decision.get("action", "no_action") if policy_decision else "no_action"
+    target = policy_decision.get("target")
+    executed = execution_result.get("executed", False) if execution_result else False
+    recovery_status = recovery_result.get("status", "not_executed") if recovery_result else "not_executed"
+
+    cries = {
+        "frontend": "**[Joy - Frontend]**: \"Oh no! 😰 Users are reporting slowness! Can someone check the backend?\"",
+        "api": "**[Logic - API]**: \"I'm seeing elevated latency and my queues are backing up! 🧠\"",
+        "database": "**[Memory - Database]**: \"My buffers are full and lock contention is rising! 💾\"",
+        "cache": "**[Swift - Cache]**: \"Cache misses are climbing; I'm evicting keys too fast! ⚡\"",
+        "auth": "**[Gatekeeper - Auth]**: \"Token verification is slowing down; possible downstream bottleneck. 🔒\"",
+    }
+    reactions = [
+        "**[Joy - Frontend]**: \"Stay calm, team! Let's isolate the cause.\"",
+        "**[Logic - API]**: \"Checking dependency latencies now.\"",
+        "**[Memory - Database]**: \"Index scans are spiking—this may be the root.\"",
+        "**[Swift - Cache]**: \"I can absorb reads if the DB needs relief.\"",
+        "**[Gatekeeper - Auth]**: \"Traffic signatures look legitimate; not an attack.\"",
+    ]
+    random.shuffle(reactions)
+
+    lines = [cries.get(service, f"**[{service}]**: \"Anomaly detected.\"")]
+    lines.extend(reactions[:4])
+
+    if action == "no_action":
+        sre = f"**[InfraMirror - SRE]**: \"✅ AIOps assessed {service}; no remediation action required. (CPU={cpu_text}, Latency={lat_text})\""
+    elif mode == "recommend" and approved and action == "restart_service":
+        sre = f"**[InfraMirror - SRE]**: \"📋 AIOps recommends restarting `{target}` for {service}; awaiting operator approval. (CPU={cpu_text}, Latency={lat_text})\""
+    elif not approved:
+        sre = f"**[InfraMirror - SRE]**: \"⛔ AIOps action for {service} denied by policy; monitoring continues. (CPU={cpu_text}, Latency={lat_text})\""
+    elif mode == "execute" and executed and recovery_status == "recovered":
+        sre = f"**[InfraMirror - SRE]**: \"♻️ Restarted `{target}` and verified recovery for {service}. (CPU={cpu_text}, Latency={lat_text})\""
+    elif mode == "execute" and executed:
+        sre = f"**[InfraMirror - SRE]**: \"⚠️ Restarted `{target}` for {service}; recovery not yet confirmed. (CPU={cpu_text}, Latency={lat_text})\""
+    else:
+        sre = f"**[InfraMirror - SRE]**: \"🚨 AIOps incident on {service}; no action taken. (CPU={cpu_text}, Latency={lat_text})\""
+
+    lines.append(sre)
+    return "\n".join(lines)

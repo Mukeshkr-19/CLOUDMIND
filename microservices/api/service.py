@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request, g
 from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST, CollectorRegistry
-import psutil, random, threading, time, os
+from concurrent.futures import ThreadPoolExecutor, wait
+import psutil, random, threading, time, os, sys, requests
 
 registry = CollectorRegistry()
 
@@ -17,19 +18,30 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
 
     if request.endpoint not in {"metrics", "get_dialogues"}:
+        ATTEMPTS_COUNT.labels(service=SERVICE_NAME).inc()
         elapsed_ms = (time.perf_counter() - getattr(g, "request_start", time.perf_counter())) * 1000
         LATENCY.labels(service=SERVICE_NAME).set(elapsed_ms)
         if 200 <= response.status_code < 300:
             REQUEST_COUNT.labels(service=SERVICE_NAME).inc()
+        elif response.status_code >= 400:
+            ERRORS_COUNT.labels(service=SERVICE_NAME).inc()
+    INCIDENT_ACTIVE.labels(service=SERVICE_NAME).set(1 if is_stressed else 0)
     return response
 
 
 # Prometheus metrics
 REQUEST_COUNT = Counter('service_requests_total', 'Total number of requests', ['service'], registry=registry)
+ATTEMPTS_COUNT = Counter('service_request_attempts_total', 'Total request attempts', ['service'], registry=registry)
+ERRORS_COUNT = Counter('service_request_errors_total', 'Total request errors', ['service'], registry=registry)
 CPU_USAGE = Gauge('service_cpu_percent', 'CPU usage percent', ['service'], registry=registry)
 LATENCY = Gauge('service_latency_ms', 'Response latency in milliseconds', ['service'], registry=registry)
+INCIDENT_ACTIVE = Gauge('service_incident_active', 'Active controlled stress incident state', ['service'], registry=registry)
+DEPENDENCY_UP = Gauge('service_dependency_up', 'Dependency availability up state', ['service', 'dependency'], registry=registry)
+DEPENDENCY_LATENCY = Gauge('service_dependency_latency_ms', 'Measured dependency response latency in ms', ['service', 'dependency'], registry=registry)
 
 SERVICE_NAME = "api"
+PROBE_TIMEOUT_SECONDS = 1.5
+TOTAL_WORK_TIMEOUT_SECONDS = 2.0
 
 # Chaos Engine variables
 is_stressed = False
@@ -121,11 +133,90 @@ def status():
         "is_stressed": is_stressed
     })
 
+def _probe_dependency_single(dep_name, base_url):
+    if not base_url or not base_url.strip():
+        return dep_name, False, 0.0, None, "missing_configuration"
+
+    url = f"{base_url.rstrip('/')}/probe"
+    start_t = time.perf_counter()
+    try:
+        resp = requests.get(url, timeout=PROBE_TIMEOUT_SECONDS)
+        elapsed_ms = (time.perf_counter() - start_t) * 1000.0
+        is_up = (200 <= resp.status_code < 300)
+        err_cat = None if is_up else "unavailable"
+        return dep_name, is_up, elapsed_ms, resp.status_code, err_cat
+    except requests.exceptions.Timeout:
+        elapsed_ms = (time.perf_counter() - start_t) * 1000.0
+        return dep_name, False, elapsed_ms, None, "timeout"
+    except requests.exceptions.RequestException:
+        elapsed_ms = (time.perf_counter() - start_t) * 1000.0
+        return dep_name, False, elapsed_ms, None, "unavailable"
+    except Exception:
+        elapsed_ms = (time.perf_counter() - start_t) * 1000.0
+        return dep_name, False, elapsed_ms, None, "invalid_response"
+
+@app.route("/work")
+def work():
+    latency = current_latency()
+    time.sleep(latency / 1000.0)
+
+    deps = [
+        ("database", os.getenv("DATABASE_URL", "http://database:5052")),
+        ("cache", os.getenv("CACHE_URL", "http://cache:5053")),
+        ("auth", os.getenv("AUTH_URL", "http://auth:5054")),
+    ]
+
+    results_map = {}
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [executor.submit(_probe_dependency_single, name, url) for name, url in deps]
+        done, _ = wait(futures, timeout=TOTAL_WORK_TIMEOUT_SECONDS)
+        for future in futures:
+            if future in done:
+                try:
+                    dep_name, is_up, elapsed_ms, status_code, err_cat = future.result()
+                    results_map[dep_name] = (is_up, elapsed_ms, status_code, err_cat)
+                except Exception:
+                    pass
+
+    all_healthy = True
+    dep_results = {}
+
+    for dep_name, _ in deps:
+        if dep_name in results_map:
+            is_up, elapsed_ms, status_code, err_cat = results_map[dep_name]
+        else:
+            is_up, elapsed_ms, status_code, err_cat = False, 0.0, None, "timeout"
+
+        DEPENDENCY_LATENCY.labels(service=SERVICE_NAME, dependency=dep_name).set(elapsed_ms)
+        DEPENDENCY_UP.labels(service=SERVICE_NAME, dependency=dep_name).set(1 if is_up else 0)
+
+        dep_entry = {
+            "up": is_up,
+            "latency_ms": round(elapsed_ms, 2)
+        }
+        if status_code is not None:
+            dep_entry["status_code"] = status_code
+        if err_cat is not None:
+            dep_entry["error"] = err_cat
+            all_healthy = False
+        if not is_up:
+            all_healthy = False
+
+        dep_results[dep_name] = dep_entry
+
+    status_code = 200 if all_healthy else 503
+    return jsonify({
+        "service": SERVICE_NAME,
+        "status": "ok" if all_healthy else "degraded",
+        "dependencies": dep_results,
+        "is_stressed": is_stressed
+    }), status_code
+
 @app.route("/metrics")
 def metrics():
     cpu = current_cpu()
     CPU_USAGE.labels(service=SERVICE_NAME).set(cpu)
-    
+    INCIDENT_ACTIVE.labels(service=SERVICE_NAME).set(1 if is_stressed else 0)
     return generate_latest(registry), 200, {'Content-Type': CONTENT_TYPE_LATEST}
 
 @app.route("/stress", methods=["POST"])

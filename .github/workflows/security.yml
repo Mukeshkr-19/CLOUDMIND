@@ -3,9 +3,7 @@ name: Security Checks
 on:
   push:
     branches:
-      - main
-      - reliability-security-hardening
-      - production-hardening-followup
+      - '**'
   pull_request:
     branches:
       - main

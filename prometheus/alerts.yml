@@ -40,3 +40,38 @@ groups:
         annotations:
           summary: "Elevated latency on: {{ $labels.service }}"
           description: "Latency has spiked to {{ $value }}ms on '{{ $labels.service }}'."
+
+      # Alert on sustained request error ratio (>= 10% errors)
+      - alert: ServiceRequestErrorRateHigh
+        expr: (rate(service_request_errors_total[1m]) / clamp_min(rate(service_request_attempts_total[1m]), 0.001)) >= 0.1
+        for: 15s
+        labels:
+          severity: warning
+          service: "{{ $labels.service }}"
+        annotations:
+          summary: "High request error rate on: {{ $labels.service }}"
+          description: "Sustained request error ratio on service '{{ $labels.service }}' has exceeded 10%."
+
+      # Alert if API dependency is unavailable
+      - alert: ApiDependencyUnavailable
+        expr: service_dependency_up == 0
+        for: 15s
+        labels:
+          severity: critical
+          service: "api"
+          dependency: "{{ $labels.dependency }}"
+        annotations:
+          summary: "API dependency unavailable: {{ $labels.dependency }}"
+          description: "API service failed to probe dependency '{{ $labels.dependency }}'."
+
+      # Alert on sustained API dependency latency (>= 350ms)
+      - alert: HighDependencyLatency
+        expr: service_dependency_latency_ms >= 350
+        for: 15s
+        labels:
+          severity: warning
+          service: "api"
+          dependency: "{{ $labels.dependency }}"
+        annotations:
+          summary: "High dependency latency: {{ $labels.dependency }}"
+          description: "API measured dependency latency for '{{ $labels.dependency }}' is {{ $value }}ms."

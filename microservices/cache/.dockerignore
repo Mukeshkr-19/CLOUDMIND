@@ -1,0 +1,10 @@
+.env*
+tests
+__pycache__
+*.pyc
+*.pyo
+.DS_Store
+.vscode
+.idea
+*.swp
+*.tmp

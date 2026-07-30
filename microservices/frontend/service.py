@@ -16,18 +16,25 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-CloudMind-Token')
     response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
 
-    if request.endpoint not in {"metrics", "get_dialogues"}:
+    if request.endpoint not in {"metrics", "get_dialogues", "get_aiops_incidents"}:
+        ATTEMPTS_COUNT.labels(service=SERVICE_NAME).inc()
         elapsed_ms = (time.perf_counter() - getattr(g, "request_start", time.perf_counter())) * 1000
         LATENCY.labels(service=SERVICE_NAME).set(elapsed_ms)
         if 200 <= response.status_code < 300:
             REQUEST_COUNT.labels(service=SERVICE_NAME).inc()
+        elif response.status_code >= 400:
+            ERRORS_COUNT.labels(service=SERVICE_NAME).inc()
+    INCIDENT_ACTIVE.labels(service=SERVICE_NAME).set(1 if is_stressed else 0)
     return response
 
 
 # Prometheus metrics
 REQUEST_COUNT = Counter('service_requests_total', 'Total number of requests', ['service'], registry=registry)
+ATTEMPTS_COUNT = Counter('service_request_attempts_total', 'Total request attempts', ['service'], registry=registry)
+ERRORS_COUNT = Counter('service_request_errors_total', 'Total request errors', ['service'], registry=registry)
 CPU_USAGE = Gauge('service_cpu_percent', 'CPU usage percent', ['service'], registry=registry)
 LATENCY = Gauge('service_latency_ms', 'Response latency in milliseconds', ['service'], registry=registry)
+INCIDENT_ACTIVE = Gauge('service_incident_active', 'Active controlled stress incident state', ['service'], registry=registry)
 
 SERVICE_NAME = "frontend"
 
@@ -46,6 +53,7 @@ stress_worker_count = 0
 DIALOGUE_DIR = os.getenv("SHARED_DATA_DIR", "/app/shared")
 DIALOGUE_PATH = os.path.join(DIALOGUE_DIR, "dialogues.json")
 DIALOGUE_LOCK_PATH = os.path.join(DIALOGUE_DIR, "dialogues.lock")
+AIOPS_INCIDENTS_PATH = os.path.join(DIALOGUE_DIR, "aiops_incidents.json")
 
 @app.before_request
 def track_request():
@@ -789,6 +797,16 @@ def dashboard():
                 <div style="color: var(--text-muted); font-size: 0.85rem;">Listening for whispers from the cloud...</div>
             </div>
         </div>
+
+        <!-- AIOps Closed-Loop Decisions Panel -->
+        <div class="glass-panel" style="grid-column: 1 / -1;">
+            <div class="panel-title">
+                <span>🤖 AIOps Closed-Loop Decisions</span>
+            </div>
+            <div id="aiops-incidents-console" style="display: flex; flex-direction: column; gap: 1rem;">
+                <div style="color: var(--text-muted); font-size: 0.85rem;" id="aiops-empty-msg">No active or past AIOps incidents recorded.</div>
+            </div>
+        </div>
     </main>
 
     <script>
@@ -811,6 +829,16 @@ def dashboard():
             "Gatekeeper - Auth": "var(--gatekeeper-color)",
             "InfraMirror - SRE": "#c084fc"
         };
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
 
         async function stress(service) {
             try {
@@ -942,11 +970,197 @@ def dashboard():
             } catch (err) {}
         }
 
+        async function updateAiopsIncidents() {
+            const consoleEl = document.getElementById("aiops-incidents-console");
+            if (!consoleEl) return;
+            try {
+                const response = await fetch(serviceUrl(5050, "/aiops-incidents"));
+                if (!response.ok) {
+                    consoleEl.textContent = "";
+                    const errDiv = document.createElement("div");
+                    errDiv.style.color = "var(--danger-color)";
+                    errDiv.style.fontSize = "0.85rem";
+                    errDiv.textContent = "Failed to fetch AIOps decision records.";
+                    consoleEl.appendChild(errDiv);
+                    return;
+                }
+                const history = await response.json();
+                if (!Array.isArray(history) || history.length === 0) {
+                    consoleEl.textContent = "";
+                    const emptyDiv = document.createElement("div");
+                    emptyDiv.style.color = "var(--text-muted)";
+                    emptyDiv.style.fontSize = "0.85rem";
+                    emptyDiv.id = "aiops-empty-msg";
+                    emptyDiv.textContent = "No active or past AIOps incidents recorded.";
+                    consoleEl.appendChild(emptyDiv);
+                    return;
+                }
+                consoleEl.textContent = "";
+                history.forEach(item => {
+                    const card = document.createElement("div");
+                    card.className = "incident-card";
+
+                    const diag = item.diagnosis || {};
+                    const pol = item.policy_decision || item.policy || {};
+                    const exec = item.execution_result || item.execution || {};
+                    const rec = item.recovery_result || item.recovery || {};
+
+                    const header = document.createElement("div");
+                    header.className = "incident-header";
+
+                    const leftHeader = document.createElement("div");
+                    leftHeader.style.display = "flex";
+                    leftHeader.style.gap = "0.5rem";
+                    leftHeader.style.alignItems = "center";
+                    leftHeader.style.flexWrap = "wrap";
+
+                    const incIdSpan = document.createElement("span");
+                    incIdSpan.style.fontWeight = "700";
+                    incIdSpan.textContent = "INCIDENT #" + (item.incident_id || "N/A");
+                    leftHeader.appendChild(incIdSpan);
+
+                    // Source badge
+                    const srcVal = diag.source || item.model_source || item.mode;
+                    const isGemini = (srcVal === "gemini");
+                    const sourceBadge = document.createElement("span");
+                    sourceBadge.style.padding = "0.15rem 0.5rem";
+                    sourceBadge.style.borderRadius = "4px";
+                    sourceBadge.style.fontSize = "0.7rem";
+                    sourceBadge.style.fontWeight = "600";
+                    if (isGemini) {
+                        sourceBadge.style.background = "rgba(168, 85, 247, 0.15)";
+                        sourceBadge.style.color = "#c084fc";
+                        sourceBadge.style.border = "1px solid rgba(168, 85, 247, 0.3)";
+                        sourceBadge.textContent = "✨ Gemini AI";
+                    } else {
+                        sourceBadge.style.background = "rgba(94, 106, 210, 0.15)";
+                        sourceBadge.style.color = "#818cf8";
+                        sourceBadge.style.border = "1px solid rgba(94, 106, 210, 0.3)";
+                        sourceBadge.textContent = "⚙️ Deterministic Rules Fallback";
+                    }
+                    leftHeader.appendChild(sourceBadge);
+
+                    // Mode / execution status badge logic (Truthful representation)
+                    const recActionObj = diag.recommended_action || {};
+                    const isApproved = pol.approved !== false;
+                    const isNoAction = (pol.action === "no_action" || recActionObj.type === "no_action" || (!pol.action && !recActionObj.type));
+                    const isExecuted = exec.executed === true;
+                    const isExecFailed = (exec.executed === false && (exec.status === "failed" || (exec.details && String(exec.details).toLowerCase().includes("fail"))));
+
+                    let badgeText = "💡 Recommendation Only";
+                    let badgeBg = "rgba(245, 158, 11, 0.15)";
+                    let badgeColor = "#f59e0b";
+                    let badgeBorder = "1px solid rgba(245, 158, 11, 0.3)";
+
+                    if (!isApproved) {
+                        badgeText = "🚫 Policy Denied";
+                        badgeBg = "rgba(239, 68, 68, 0.15)";
+                        badgeColor = "#ef4444";
+                        badgeBorder = "1px solid rgba(239, 68, 68, 0.3)";
+                    } else if (isNoAction) {
+                        badgeText = "ℹ️ No Action";
+                        badgeBg = "rgba(138, 143, 152, 0.15)";
+                        badgeColor = "#8a8f98";
+                        badgeBorder = "1px solid rgba(138, 143, 152, 0.3)";
+                    } else if (isExecuted) {
+                        badgeText = "⚡ Executed";
+                        badgeBg = "rgba(16, 185, 129, 0.15)";
+                        badgeColor = "#10b981";
+                        badgeBorder = "1px solid rgba(16, 185, 129, 0.3)";
+                    } else if (isExecFailed) {
+                        badgeText = "❌ Execution Failed";
+                        badgeBg = "rgba(239, 68, 68, 0.15)";
+                        badgeColor = "#ef4444";
+                        badgeBorder = "1px solid rgba(239, 68, 68, 0.3)";
+                    }
+
+                    const modeBadge = document.createElement("span");
+                    modeBadge.style.padding = "0.15rem 0.5rem";
+                    modeBadge.style.borderRadius = "4px";
+                    modeBadge.style.fontSize = "0.7rem";
+                    modeBadge.style.fontWeight = "600";
+                    modeBadge.style.background = badgeBg;
+                    modeBadge.style.color = badgeColor;
+                    modeBadge.style.border = badgeBorder;
+                    modeBadge.textContent = badgeText;
+                    leftHeader.appendChild(modeBadge);
+
+                    const timeSpan = document.createElement("span");
+                    timeSpan.textContent = item.completed_at || item.started_at || item.timestamp || "N/A";
+
+                    header.appendChild(leftHeader);
+                    header.appendChild(timeSpan);
+                    card.appendChild(header);
+
+                    const grid = document.createElement("div");
+                    grid.style.display = "grid";
+                    grid.style.gridTemplateColumns = "repeat(auto-fit, minmax(200px, 1fr))";
+                    grid.style.gap = "0.8rem";
+                    grid.style.fontSize = "0.82rem";
+                    grid.style.marginTop = "0.4rem";
+
+                    function addDetail(label, textContentVal) {
+                        const itemDiv = document.createElement("div");
+                        const strong = document.createElement("strong");
+                        strong.style.color = "var(--text-muted)";
+                        strong.textContent = label + ": ";
+                        const valSpan = document.createElement("span");
+                        valSpan.style.color = "#ffffff";
+                        valSpan.textContent = textContentVal;
+                        itemDiv.appendChild(strong);
+                        itemDiv.appendChild(valSpan);
+                        grid.appendChild(itemDiv);
+                    }
+
+                    const recActionText = typeof recActionObj === "object" ? (recActionObj.type || recActionObj.target_service || "None") : String(recActionObj);
+
+                    addDetail("Probable Cause", diag.probable_cause || diag.summary || item.trigger || "Unknown cause");
+                    addDetail("Confidence", diag.confidence !== undefined ? (diag.confidence * 100).toFixed(0) + "%" : "N/A");
+                    addDetail("Affected Services", Array.isArray(diag.affected_services) ? diag.affected_services.join(", ") : (diag.affected_services || "N/A"));
+                    addDetail("Recommendation", pol.action || recActionText);
+                    addDetail("Execution Result", exec.details || (exec.executed ? "Executed" : "Recommendation recorded"));
+
+                    const recStatusVal = rec.status || (rec.recovered ? "recovered" : "active");
+                    const recDiv = document.createElement("div");
+                    const recStrong = document.createElement("strong");
+                    recStrong.style.color = "var(--text-muted)";
+                    recStrong.textContent = "Recovery Status: ";
+                    const recValSpan = document.createElement("span");
+                    if (recStatusVal === "recovered" || rec.recovered === true) {
+                        recValSpan.style.color = "#10b981";
+                        recValSpan.style.fontWeight = "600";
+                        recValSpan.textContent = "✅ Recovered";
+                    } else if (recStatusVal === "not_executed") {
+                        recValSpan.style.color = "var(--text-muted)";
+                        recValSpan.textContent = "Not executed";
+                    } else {
+                        recValSpan.style.color = "#f59e0b";
+                        recValSpan.textContent = "⏳ " + recStatusVal;
+                    }
+                    recDiv.appendChild(recStrong);
+                    recDiv.appendChild(recValSpan);
+                    grid.appendChild(recDiv);
+
+                    card.appendChild(grid);
+                    consoleEl.appendChild(card);
+                });
+            } catch (err) {
+                consoleEl.textContent = "";
+                const errDiv = document.createElement("div");
+                errDiv.style.color = "var(--danger-color)";
+                errDiv.style.fontSize = "0.85rem";
+                errDiv.textContent = "Error loading AIOps decisions.";
+                consoleEl.appendChild(errDiv);
+            }
+        }
+
         setInterval(updateStatus, 1000);
         setInterval(updateDialogues, 1500);
+        setInterval(updateAiopsIncidents, 2000);
         
         updateStatus();
         updateDialogues();
+        updateAiopsIncidents();
     </script>
 </body>
 </html>
@@ -1002,11 +1216,25 @@ def get_dialogues():
         fcntl.flock(lock, fcntl.LOCK_UN)
         lock.close()
 
+@app.route("/aiops-incidents", methods=["GET"])
+def get_aiops_incidents():
+    incidents_path = os.path.join(os.getenv("SHARED_DATA_DIR", "/app/shared"), "aiops_incidents.json")
+    if not os.path.exists(incidents_path):
+        return jsonify([])
+    try:
+        with open(incidents_path, "r") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return jsonify(data[:20])
+            return jsonify([])
+    except Exception:
+        return jsonify([])
+
 @app.route("/metrics")
 def metrics():
     cpu = current_cpu()
     CPU_USAGE.labels(service=SERVICE_NAME).set(cpu)
-    
+    INCIDENT_ACTIVE.labels(service=SERVICE_NAME).set(1 if is_stressed else 0)
     return generate_latest(registry), 200, {'Content-Type': CONTENT_TYPE_LATEST}
 
 @app.route("/stress", methods=["POST"])

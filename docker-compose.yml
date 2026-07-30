@@ -29,6 +29,17 @@ services:
     restart: unless-stopped
     ports:
       - "5051:5051"
+    environment:
+      DATABASE_URL: "http://database:5052"
+      CACHE_URL: "http://cache:5053"
+      AUTH_URL: "http://auth:5054"
+    depends_on:
+      database:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
     deploy:
       <<: *microservice-resources
     healthcheck:
@@ -110,13 +121,12 @@ services:
   alertmanager:
     image: prom/alertmanager
     restart: unless-stopped
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - token_escaped=$$(printf '%s' "$$WHISPER_TOKEN" | sed 's/[\\\/&|]/\\&/g') && sed "s|__WHISPER_TOKEN__|$$token_escaped|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
+    entrypoint: ["/bin/sh", "/etc/alertmanager/entrypoint.sh"]
     environment:
       WHISPER_TOKEN: "${WHISPER_TOKEN:?Set WHISPER_TOKEN in .env before starting CloudMind}"
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ./alertmanager/entrypoint.sh:/etc/alertmanager/entrypoint.sh:ro
       - alertmanager-storage:/alertmanager
     ports:
       - "9093:9093"
@@ -136,7 +146,7 @@ services:
       start_period: 10s
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:13.0.1-security-01
     container_name: cloudmind-grafana-1
     restart: unless-stopped
     ports:
@@ -144,6 +154,7 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env before starting CloudMind}
+      - GF_PLUGINS_PREINSTALL_DISABLED=true
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
     volumes:
       - grafana-storage:/var/lib/grafana
@@ -192,7 +203,7 @@ services:
         condition: service_healthy
     environment:
       PROM_URL: "http://prometheus:9090"
-      HEALING_ENABLED: "true"
+      HEALING_ENABLED: "${HEALING_ENABLED:-false}"
       CPU_SOFT_THRESHOLD: "70"
       CPU_HARD_THRESHOLD: "85"
       LAT_WARN_MS: "250"
@@ -201,6 +212,16 @@ services:
       WHISPER_TOKEN: "${WHISPER_TOKEN:?Set WHISPER_TOKEN in .env before starting CloudMind}"
       GEMINI_API_KEY: "${GEMINI_API_KEY}"
       DISCORD_WEBHOOK_URL: "${DISCORD_WEBHOOK_URL}"
+      AIOPS_ENABLED: "${AIOPS_ENABLED:-true}"
+      AIOPS_EXECUTION_MODE: "${AIOPS_EXECUTION_MODE:-recommend}"
+      AIOPS_CONFIDENCE_THRESHOLD: "${AIOPS_CONFIDENCE_THRESHOLD:-0.75}"
+      AIOPS_RECOVERY_TIMEOUT_SEC: "${AIOPS_RECOVERY_TIMEOUT_SEC:-45}"
+      AIOPS_RECOVERY_POLL_SEC: "${AIOPS_RECOVERY_POLL_SEC:-3}"
+      AIOPS_REQUIRED_HEALTHY_SAMPLES: "${AIOPS_REQUIRED_HEALTHY_SAMPLES:-2}"
+      AIOPS_MAX_WORKERS: "${AIOPS_MAX_WORKERS:-5}"
+      AIOPS_QUEUE_CAPACITY: "${AIOPS_QUEUE_CAPACITY:-10}"
+      AIOPS_ERROR_RATIO_THRESHOLD: "${AIOPS_ERROR_RATIO_THRESHOLD:-0.10}"
+      AIOPS_EXECUTION_GRACE_SEC: "${AIOPS_EXECUTION_GRACE_SEC:-30}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - shared-data:/app/shared

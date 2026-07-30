@@ -8,7 +8,7 @@ WORKDIR /app
 COPY service.py .
 
 # 4. Install runtime dependencies
-RUN pip install --no-cache-dir flask prometheus_client psutil
+RUN pip install --no-cache-dir flask prometheus_client psutil requests==2.34.2
 # 5. Expose the port Flask runs on
 EXPOSE 5051
 
