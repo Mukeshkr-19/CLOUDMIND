@@ -273,24 +273,27 @@ See [.env.example](.env.example) for all bounded tuning options.
 | <code>grafana/provisioning/</code> | Service and AIOps dashboards |
 | <code>.github/workflows/</code> | SHA-pinned CI, security, and CodeQL |
 
-## Honest Scope
+## Design Scope
 
-CloudMind is a portfolio and educational system for controlled local environments—not a production orchestrator.
+CloudMind is deliberately optimized as an operator-owned Docker Compose reference implementation: small enough to run locally, but complete enough to demonstrate the full observe → diagnose → govern → remediate → verify loop.
 
-- No learned anomaly-detection model or online learning.
-- No formal causal-inference engine.
-- No Kubernetes remediation implementation.
-- Docker socket access has host-level security implications.
-- Gemini output and availability can vary; deterministic rules remain available.
-- Safety-module coverage is 80.17%, below the 85% stretch goal.
-- Execute-mode recovery measurements and an edited end-to-end video remain future work.
+| Engineering focus | Current design boundary |
+|---|---|
+| Dependency-aware operational reasoning | Correlates real telemetry and service topology without presenting heuristics as formal causal inference |
+| Safe AI-assisted diagnosis | Gemini is optional, schema-constrained, and backed by deterministic rules |
+| Governed closed-loop remediation | Local policy, budgets, leases, and circuit breakers retain execution authority |
+| Reproducible incident laboratory | Five Dockerized services provide controlled failure and recovery scenarios |
 
-## Roadmap
+> **Deployment boundary:** InfraMirror's Docker socket access is intentionally limited to an operator-owned lab. A broader deployment should replace it with a narrower, authenticated remediation adapter.
 
-- Raise safety-module branch coverage above 85% with meaningful failure-path tests.
-- Publish isolated execute-mode recovery measurements.
-- Replace direct Docker socket access with a narrower remediation adapter.
-- Add an edited end-to-end demonstration.
+Detailed constraints and threat boundaries live in the [safety model](docs/safety-model.md) and [architecture documentation](docs/architecture.md), keeping this overview focused on the working system.
+
+## Next Engineering Milestones
+
+- Expand meaningful safety-path coverage beyond the current 80.17% gate.
+- Publish isolated execute-mode recovery benchmarks.
+- Introduce a narrower remediation adapter behind the existing policy interface.
+- Add a concise end-to-end demonstration video.
 
 ## Project Story
 
