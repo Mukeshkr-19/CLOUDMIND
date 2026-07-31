@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CloudMind Causal Incident Scenario Runner.
+CloudMind AIOps Incident Scenario Runner.
 
 Triggers controlled stress states, dependency bottlenecks, and load spikes
 against CloudMind services running on 127.0.0.1.
@@ -446,7 +446,12 @@ def run_transient_spike(host, requests_count, duration_sec, incident_timeout, ex
 
 def main():
     parser = argparse.ArgumentParser(
-        description="CloudMind AIOps Causal Incident Scenario Runner"
+        description="CloudMind AIOps Causal Incident Scenario Runner",
+        epilog=(
+            "Use --generate-deterministic-report for the complete ten-scenario "
+            "offline safety matrix, including weak-signal, duplicate-alert, "
+            "circuit-breaker, and invalid-provider-output cases."
+        ),
     )
     parser.add_argument(
         "scenario",
@@ -501,8 +506,23 @@ def main():
         default="127.0.0.1",
         help="Target host (must be 127.0.0.1 or localhost)",
     )
+    parser.add_argument(
+        "--generate-deterministic-report",
+        action="store_true",
+        help="Run the zero-cost ten-scenario fixture matrix and write JSON/Markdown reports",
+    )
 
     args = parser.parse_args()
+
+    if args.generate_deterministic_report:
+        from pathlib import Path
+        from aiops_validation import write_reports
+        payload = write_reports(
+            Path("artifacts/aiops-validation-results.json"),
+            Path("docs/validation-results.md"),
+        )
+        print(json.dumps(payload["summary"], indent=2))
+        return
 
     scenario = args.scenario_opt if args.scenario_opt else args.scenario
 
