@@ -1,0 +1,55 @@
+{
+  "incident_id": "sanitized-example-database-dependency",
+  "incident_fingerprint": "7af0798e55a95db960bfd544efa3e46a",
+  "trigger": {
+    "service": "api",
+    "alertname": "DependencyDown",
+    "reason": "Controlled local demonstration"
+  },
+  "diagnosis": {
+    "probable_cause_service": "database",
+    "probable_cause": "Database dependency is unavailable and impacting API",
+    "model_confidence": 0.85,
+    "source": "rules",
+    "evidence": [
+      {
+        "service": "api",
+        "signal": "dependency_up",
+        "dependency": "database",
+        "value": 0.0,
+        "actual_value": 0.0,
+        "grounded": true,
+        "snapshot_timestamp": "2026-07-30T00:00:00+00:00",
+        "replacement_reason": null,
+        "interpretation": "Database dependency is unavailable"
+      }
+    ],
+    "recommended_action": {
+      "type": "restart_service",
+      "target_service": "database",
+      "reason": "Earliest unhealthy dependency affecting API"
+    },
+    "risk": "low"
+  },
+  "policy_decision": {
+    "approved": true,
+    "mode": "recommend",
+    "action": "restart_service",
+    "target": "database",
+    "confidence_threshold": 0.75,
+    "policy_evidence_score": 0.85,
+    "evidence_score_threshold": 0.55,
+    "reason": "Policy approved"
+  },
+  "execution_result": {
+    "executed": false,
+    "target": "database",
+    "details": "Recommendation recorded; execution deferred"
+  },
+  "restart_budget_state": {},
+  "circuit_breaker_state": {},
+  "recovery_result": {
+    "status": "not_executed",
+    "details": "Recommend mode; execution deferred"
+  }
+}

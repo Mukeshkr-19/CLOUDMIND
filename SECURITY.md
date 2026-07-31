@@ -26,6 +26,15 @@ InfraMirror rejects requests to `/whisper` unless they include a valid authentic
 - **Network Boundary Protection**: Do not expose port `5055` or the `/whisper` endpoint directly to untrusted public networks.
 - **Token Rotation**: Rotate `WHISPER_TOKEN` immediately in `.env` if it appears in logs, shell histories, screenshots, or code repositories.
 
+## Gemini Provider Boundary
+
+- Gemini keys are sent only in the `x-goog-api-key` request header; they are never placed in URLs.
+- Endpoint construction is centralized and the configurable model name cannot inject a URL, query string, or path.
+- Request headers, credentials, complete provider URLs, and provider error bodies are not logged or persisted.
+- Only HTTP 429, 500, 502, 503, and 504 receive at most three bounded retry attempts with backoff and jitter. Authentication and schema failures are not retried.
+- Provider absence, timeout, authentication failure, rate limiting, server error, malformed/empty output, or schema failure falls back to deterministic rules.
+- Structured output limits services, actions, risk values, field lengths, and evidence signal names. Local Python validation remains authoritative.
+
 ---
 
 ## 📢 Discord Webhook Safeguards
@@ -86,12 +95,20 @@ CloudMind enforces multiple deterministic safety controls across distinct decisi
 
 1. **Startup Execution Grace (`AIOPS_EXECUTION_GRACE_SEC=30`)**: During process startup grace (0–300s), effective execution mode is forced to `recommend` before policy evaluation occurs, suppressing automated remediation triggers during startup.
 2. **Internal Target Allowlist (`ALLOWED_SERVICES`)**: Internal Python code allowlist in `aiops_models.py` strictly bounds restarts to managed CloudMind microservices (`api`, `database`, `cache`, `auth`, `frontend`). Attempts to target unmanaged containers are rejected.
-3. **Confidence Threshold (`AIOPS_CONFIDENCE_THRESHOLD=0.75`)**: Diagnostic confidence score (`diagnosis.confidence`) must satisfy the policy threshold before policy approval.
-4. **Supporting Abnormal Telemetry**: Policy evaluation verifies supporting abnormal conditions via `has_supporting_abnormal_telemetry`. Abnormal conditions may be established by error ratio (`error_rate >= AIOPS_ERROR_RATIO_THRESHOLD`, default `0.10`), elevated CPU (`cpu_percent >= CPU_HARD`), pain latency (`latency_ms >= LAT_PAIN_MS`), service unavailability (`available is False`), active incident flags, or downstream dependency failures. Error ratio is one of several valid supporting signals.
-5. **Remediation Cooldown (`HEALING_COOLDOWN_SEC=150`)**: Enforces a mandatory cooldown window per target service to prevent restart loops.
-6. **Per-Target Lease Lock (`threading.Lock`)**: A thread-safe mutex lease is acquired ONLY after policy approval immediately prior to container restart execution.
-7. **Post-Action Recovery Verification**: Post-action verification evaluates Prometheus `up`, `service_cpu_percent`, `service_latency_ms`, and for dependency-caused API incidents, `service_dependency_up` metric plus active HTTP probes to API `/work`. Valid recovery status values are `recovered`, `not_recovered`, `inconclusive`, and `not_executed`.
-8. **Bounded Worker Queue (`AIOPS_MAX_WORKERS=5`, `AIOPS_QUEUE_CAPACITY=10`)**: Prevents worker queue overflow and resource starvation under alert bursts.
+3. **Advisory Model Confidence (`AIOPS_CONFIDENCE_THRESHOLD=0.75`)**: `model_confidence` is treated as an uncalibrated advisory score, never a correctness probability.
+4. **Evidence Grounding**: Model-selected signal values are replaced with values from the captured telemetry snapshot. Invented, missing, duplicate, non-finite, or wrong-target evidence cannot approve execution.
+5. **Deterministic Evidence Score (`AIOPS_EVIDENCE_SCORE_THRESHOLD=0.55`)**: Policy independently scores grounded signals, severity, availability, dependency correlation, and matching alerts. A single weak signal cannot approve a restart.
+6. **Supporting Abnormal Telemetry**: Policy rechecks CPU, latency, errors, availability, incident state, and dependencies before execution.
+7. **Remediation Cooldown (`HEALING_COOLDOWN_SEC=150`)**: Enforces a mandatory cooldown window per target service.
+8. **Per-Target Lease Lock**: A thread-safe lease is acquired after approval immediately before execution.
+9. **Rolling Restart Budget**: `AIOPS_MAX_RESTARTS_PER_SERVICE_PER_HOUR=3` bounds restarts per target.
+10. **Recovery Circuit Breaker**: Two failed recoveries open the target circuit for 900 seconds by default. Only an authenticated target-scoped endpoint can reset it manually; the LLM cannot reset it.
+11. **Post-Action Recovery Verification**: Prometheus health and active dependency probes determine recovery.
+12. **Bounded Worker Queue**: `AIOPS_MAX_WORKERS=5` and `AIOPS_QUEUE_CAPACITY=10` prevent alert bursts from exhausting resources.
+
+## CI Supply-Chain Controls
+
+GitHub Actions references are pinned to full commit SHAs with release comments. CI uses read-only contents permission; CodeQL receives only the additional `security-events: write` permission it needs. Dependabot groups monthly Python and workflow updates to limit noise. Gitleaks, pip-audit, Trivy, CodeQL, Ruff, mypy, tests, coverage, compilation, and Compose validation run without live Gemini credentials.
 
 ---
 
