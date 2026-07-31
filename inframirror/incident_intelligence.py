@@ -23,6 +23,7 @@ try:
         StructuredDiagnosis,
         TelemetrySnapshot,
     )
+    from . import evidence_grounding, gemini_client
 except ImportError:
     from aiops_models import (
         ALLOWED_ACTIONS,
@@ -35,16 +36,64 @@ except ImportError:
         StructuredDiagnosis,
         TelemetrySnapshot,
     )
+    import evidence_grounding
+    import gemini_client
 
 
-GEMINI_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-)
+GEMINI_URL = gemini_client.endpoint()
 ERROR_RATIO_THRESHOLD = float(os.getenv("AIOPS_ERROR_RATIO_THRESHOLD", "0.10"))
 MAX_OUTPUT_TOKENS = 800
 REQUEST_TIMEOUT = 8.0
 MAX_PROMPT_LEN = 16000
 MAX_RESPONSE_CHARS = 16000
+
+DIAGNOSIS_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "schema_version": {"type": "string", "enum": ["1.0"]},
+        "probable_cause_service": {"type": "string", "enum": sorted(ALLOWED_SERVICES)},
+        "probable_cause": {"type": "string", "maxLength": 512},
+        "model_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "affected_services": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {"type": "string", "enum": sorted(ALLOWED_SERVICES)},
+        },
+        "evidence": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "service": {"type": "string", "enum": sorted(ALLOWED_SERVICES)},
+                    "signal": {"type": "string", "enum": sorted(evidence_grounding.SUPPORTED_SIGNALS)},
+                    "dependency": {"type": ["string", "null"], "enum": sorted(ALLOWED_SERVICES) + [None]},
+                    "value": {"type": "number"},
+                    "interpretation": {"type": "string", "maxLength": 256},
+                },
+                "required": ["service", "signal", "dependency", "value", "interpretation"],
+            },
+        },
+        "recommended_action": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "type": {"type": "string", "enum": sorted(ALLOWED_ACTIONS)},
+                "target_service": {"type": ["string", "null"], "enum": sorted(ALLOWED_SERVICES) + [None]},
+                "reason": {"type": "string", "maxLength": 512},
+            },
+            "required": ["type", "target_service", "reason"],
+        },
+        "risk": {"type": "string", "enum": sorted(ALLOWED_RISKS)},
+    },
+    "required": [
+        "schema_version", "probable_cause_service", "probable_cause",
+        "model_confidence", "affected_services", "evidence",
+        "recommended_action", "risk",
+    ],
+}
 
 
 def _clean_json(text: str) -> str:
@@ -59,32 +108,13 @@ def _clean_json(text: str) -> str:
 
 
 def _call_gemini(prompt: str, api_key: str, timeout: float = REQUEST_TIMEOUT) -> Optional[str]:
-    if requests is None:
-        return None
-    if not api_key:
-        return None
-    try:
-        url = f"{GEMINI_URL}?key={api_key}"
-        payload = {
-            "contents": [{"parts": [{"text": prompt[:MAX_PROMPT_LEN]}]}],
-            "generationConfig": {
-                "temperature": 0.1,
-                "maxOutputTokens": MAX_OUTPUT_TOKENS,
-            },
-        }
-        resp = requests.post(url, json=payload, timeout=timeout)
-        if resp.status_code != 200:
-            return None
-        data = resp.json()
-        candidates = data.get("candidates", [])
-        if not candidates:
-            return None
-        parts = candidates[0].get("content", {}).get("parts", [])
-        if not parts or "text" not in parts[0]:
-            return None
-        return parts[0]["text"].strip()
-    except Exception:
-        return None
+    return gemini_client.call_gemini_text(
+        prompt[:MAX_PROMPT_LEN],
+        api_key,
+        timeout=timeout,
+        max_output_tokens=MAX_OUTPUT_TOKENS,
+        response_schema=DIAGNOSIS_SCHEMA,
+    )
 
 
 def _format_value(value: Optional[float]) -> str:
@@ -148,12 +178,13 @@ Return exactly one JSON object with no surrounding text. Use this schema:
   "schema_version": "1.0",
   "probable_cause_service": "<one of allowed services>",
   "probable_cause": "<concise probable cause grounded in the telemetry>",
-  "confidence": <float 0.0-1.0>,
+  "model_confidence": <advisory float 0.0-1.0; not a calibrated probability>,
   "affected_services": ["<service>", ...],
   "evidence": [
     {{
       "service": "<service>",
       "signal": "<metric name>",
+      "dependency": "<dependency service or null>",
       "value": <numeric>,
       "interpretation": "<concise interpretation>"
     }}
@@ -207,7 +238,7 @@ def _validate_and_build_diagnosis(raw: Any, source: str) -> StructuredDiagnosis:
     if risk not in ALLOWED_RISKS:
         raise ValueError(f"Unknown risk: {risk}")
 
-    confidence = raw.get("confidence")
+    confidence = raw.get("model_confidence", raw.get("confidence"))
     if not isinstance(confidence, (int, float)):
         raise ValueError("confidence must be numeric")
     if not _is_finite(confidence) or confidence < 0.0 or confidence > 1.0:
@@ -245,6 +276,7 @@ def _validate_and_build_diagnosis(raw: Any, source: str) -> StructuredDiagnosis:
                 signal=signal,
                 value=float(value),
                 interpretation=interpretation,
+                dependency=ev.get("dependency"),
             )
         )
 
@@ -453,8 +485,10 @@ def diagnose(
             try:
                 cleaned = _clean_json(raw_text[:MAX_RESPONSE_CHARS])
                 parsed = json.loads(cleaned)
-                return _validate_and_build_diagnosis(parsed, source="gemini")
+                diagnosis = _validate_and_build_diagnosis(parsed, source="gemini")
+                return evidence_grounding.ground_diagnosis(snapshot, diagnosis).diagnosis
             except Exception:
-                pass
+                raw_text = None
 
-    return rules_based_diagnosis(snapshot, err_ratio_threshold=err_ratio_threshold)
+    diagnosis = rules_based_diagnosis(snapshot, err_ratio_threshold=err_ratio_threshold)
+    return evidence_grounding.ground_diagnosis(snapshot, diagnosis).diagnosis

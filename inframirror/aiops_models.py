@@ -209,6 +209,11 @@ class EvidenceItem:
     signal: str
     value: float
     interpretation: str
+    dependency: Optional[str] = None
+    grounded: bool = False
+    actual_value: Optional[float] = None
+    snapshot_timestamp: Optional[str] = None
+    replacement_reason: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.service not in ALLOWED_SERVICES:
@@ -217,6 +222,10 @@ class EvidenceItem:
         if not _is_finite(self.value):
             raise ValueError(f"Evidence value must be finite: {self.value}")
         _bounded_str(self.interpretation, "interpretation", MAX_INTERPRETATION_LEN)
+        if self.dependency is not None and self.dependency not in ALLOWED_DEPENDENCIES:
+            raise ValueError(f"Unknown evidence dependency: {self.dependency}")
+        if self.actual_value is not None and not _is_finite(self.actual_value):
+            raise ValueError("actual_value must be finite")
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -224,6 +233,11 @@ class EvidenceItem:
             "signal": self.signal,
             "value": self.value,
             "interpretation": self.interpretation,
+            "dependency": self.dependency,
+            "grounded": self.grounded,
+            "actual_value": self.actual_value,
+            "snapshot_timestamp": self.snapshot_timestamp,
+            "replacement_reason": self.replacement_reason,
         }
 
     @classmethod
@@ -259,6 +273,7 @@ class StructuredDiagnosis:
     recommended_action: RecommendedAction
     risk: str
     source: str
+    rejected_evidence: List[Dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.probable_cause_service not in ALLOWED_SERVICES:
@@ -285,11 +300,49 @@ class StructuredDiagnosis:
             "probable_cause_service": self.probable_cause_service,
             "probable_cause": self.probable_cause,
             "confidence": self.confidence,
+            "model_confidence": self.confidence,
             "affected_services": self.affected_services,
             "evidence": [e.to_dict() for e in self.evidence],
             "recommended_action": self.recommended_action.to_dict(),
             "risk": self.risk,
             "source": self.source,
+            "rejected_evidence": self.rejected_evidence,
+        }
+
+    @property
+    def model_confidence(self) -> float:
+        """Advisory provider score; it is not a calibrated probability."""
+        return self.confidence
+
+
+@dataclass(frozen=True)
+class EvidenceAssessment:
+    grounded_signal_count: int
+    severe_signal_count: int
+    matching_alert_count: int
+    availability_failure: bool
+    dependency_failure: bool
+    dependency_correlation: bool
+    target_consistency: bool
+    evidence_score: float
+    approval_reasons: List[str] = field(default_factory=list)
+    denial_reasons: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        _clip(self.evidence_score, 0.0, 1.0, "evidence_score")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "grounded_signal_count": self.grounded_signal_count,
+            "severe_signal_count": self.severe_signal_count,
+            "matching_alert_count": self.matching_alert_count,
+            "availability_failure": self.availability_failure,
+            "dependency_failure": self.dependency_failure,
+            "dependency_correlation": self.dependency_correlation,
+            "target_consistency": self.target_consistency,
+            "evidence_score": self.evidence_score,
+            "approval_reasons": self.approval_reasons,
+            "denial_reasons": self.denial_reasons,
         }
 
 
@@ -301,6 +354,9 @@ class PolicyDecision:
     mode: str
     reason: str
     confidence_threshold: float
+    policy_evidence_score: float = 0.0
+    evidence_score_threshold: float = 0.0
+    evidence_assessment: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.action not in ALLOWED_ACTIONS:
@@ -322,6 +378,9 @@ class PolicyDecision:
             "mode": self.mode,
             "reason": self.reason,
             "confidence_threshold": self.confidence_threshold,
+            "policy_evidence_score": self.policy_evidence_score,
+            "evidence_score_threshold": self.evidence_score_threshold,
+            "evidence_assessment": self.evidence_assessment,
         }
 
 
@@ -367,6 +426,12 @@ class IncidentRecord:
     recovery_result: Dict[str, Any]
     model_source: str
     errors: List[str]
+    incident_fingerprint: Optional[str] = None
+    duplicate_count: int = 0
+    first_seen: Optional[str] = None
+    last_seen: Optional[str] = None
+    restart_budget_state: Dict[str, Any] = field(default_factory=dict)
+    circuit_breaker_state: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.model_source not in {"gemini", "rules"}:
@@ -387,6 +452,12 @@ class IncidentRecord:
             "recovery_result": self.recovery_result,
             "model_source": self.model_source,
             "errors": self.errors,
+            "incident_fingerprint": self.incident_fingerprint,
+            "duplicate_count": self.duplicate_count,
+            "first_seen": self.first_seen or self.started_at,
+            "last_seen": self.last_seen or self.completed_at or self.started_at,
+            "restart_budget_state": self.restart_budget_state,
+            "circuit_breaker_state": self.circuit_breaker_state,
         }
 
     @classmethod
@@ -398,6 +469,9 @@ class IncidentRecord:
         execution_result: ExecutionResult,
         recovery_result: RecoveryResult,
         completed_at: Optional[str] = None,
+        incident_fingerprint: Optional[str] = None,
+        restart_budget_state: Optional[Dict[str, Any]] = None,
+        circuit_breaker_state: Optional[Dict[str, Any]] = None,
     ) -> IncidentRecord:
         return cls(
             incident_id=snapshot.incident_id,
@@ -411,6 +485,11 @@ class IncidentRecord:
             recovery_result=recovery_result.to_dict(),
             model_source=diagnosis.source,
             errors=[],
+            incident_fingerprint=incident_fingerprint,
+            first_seen=snapshot.observed_at,
+            last_seen=completed_at or snapshot.observed_at,
+            restart_budget_state=restart_budget_state or {},
+            circuit_breaker_state=circuit_breaker_state or {},
         )
 
 

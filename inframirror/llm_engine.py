@@ -7,6 +7,11 @@ import tempfile
 import requests
 from datetime import datetime, timezone
 
+try:
+    from . import gemini_client
+except ImportError:
+    import gemini_client
+
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 SHARED_DATA_DIR = os.getenv("SHARED_DATA_DIR", "/app/shared")
 SHARED_DIALOGUE_PATH = os.path.join(SHARED_DATA_DIR, "dialogues.json")
@@ -35,33 +40,15 @@ def _call_gemini(prompt: str, gemini_key: str = None) -> str:
     key = (gemini_key if gemini_key is not None else GEMINI_KEY).strip()
     if not key:
         return ""
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
-        headers = {"Content-Type": "application/json"}
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 350}
-        }
-        r = requests.post(url, json=payload, headers=headers, timeout=5)
-        if r.status_code == 200:
-            data = r.json()
-            candidates = data.get("candidates", [])
-            if not candidates:
-                print("[⚠️] Gemini API returned no candidates")
-                return ""
-
-            candidate = candidates[0]
-            finish_reason = candidate.get("finishReason")
-            parts = candidate.get("content", {}).get("parts", [])
-            if not parts or "text" not in parts[0]:
-                print(f"[⚠️] Gemini API returned no text part (finishReason={finish_reason})")
-                return ""
-
-            return parts[0]["text"].strip()
-        print(f"[⚠️] Gemini API returned status {r.status_code}: {r.text[:200]}")
-    except Exception as e:
-        print(f"[⚠️] Gemini API call failed: {e}")
-    return ""
+    result = gemini_client.generate_text(
+        prompt,
+        key,
+        timeout=5.0,
+        max_output_tokens=350,
+    )
+    if result.error:
+        print(f"[⚠️] Gemini API unavailable ({result.error}); using local fallback")
+    return result.text or ""
 
 def _generate_fallback_dialogue(service: str, cpu: float, latency: float) -> str:
     cries = {
