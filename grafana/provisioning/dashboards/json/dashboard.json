@@ -402,12 +402,60 @@
           "calcs": ["last"]
         }
       }
+    },
+    {
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "id": 8,
+      "title": "AIOps Policy Decisions",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "Prometheus"},
+        "editorMode": "code",
+        "expr": "sum(rate(cloudmind_aiops_policy_decisions_total[5m])) by (decision, action, mode)",
+        "legendFormat": "{{decision}} / {{action}} / {{mode}}",
+        "range": true,
+        "refId": "A"
+      }]
+    },
+    {
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+      "id": 9,
+      "title": "AIOps Diagnosis Source and Fallbacks",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "sum(rate(cloudmind_aiops_diagnoses_total[5m])) by (source)", "legendFormat": "diagnosis {{source}}", "refId": "A"},
+        {"expr": "sum(rate(cloudmind_aiops_model_fallbacks_total[5m])) by (reason_category)", "legendFormat": "fallback {{reason_category}}", "refId": "B"}
+      ]
+    },
+    {
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 40},
+      "id": 10,
+      "title": "Recovery Results and Duration",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "sum(rate(cloudmind_aiops_recovery_results_total[5m])) by (target, result)", "legendFormat": "{{target}} {{result}}", "refId": "A"},
+        {"expr": "histogram_quantile(0.5, sum(rate(cloudmind_aiops_recovery_duration_seconds_bucket[5m])) by (le))", "legendFormat": "median duration", "refId": "B"}
+      ]
+    },
+    {
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 40},
+      "id": 11,
+      "title": "Restart Budgets and Circuit Breakers",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "cloudmind_aiops_restart_budget_remaining", "legendFormat": "{{target}} budget", "refId": "A"},
+        {"expr": "cloudmind_aiops_circuit_breaker_open", "legendFormat": "{{target}} circuit", "refId": "B"}
+      ]
     }
   ],
   "refresh": "5s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["sre", "observability", "cloudmind"],
+  "tags": ["sre", "observability", "aiops", "cloudmind"],
   "time": {
     "from": "now-15m",
     "to": "now"

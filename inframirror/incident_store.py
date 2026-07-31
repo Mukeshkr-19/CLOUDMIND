@@ -4,7 +4,10 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import shutil
 import tempfile
+import time
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 try:
@@ -64,7 +67,7 @@ def _sanitize_for_storage(data: Any) -> Any:
     return data
 
 
-def _load_existing_records(path: str) -> List[Dict[str, Any]]:
+def _load_existing_records(path: str, preserve_corrupt: bool = False) -> List[Dict[str, Any]]:
     if not os.path.exists(path):
         return []
     try:
@@ -73,7 +76,12 @@ def _load_existing_records(path: str) -> List[Dict[str, Any]]:
         if isinstance(data, list):
             return data
     except Exception:
-        pass
+        if preserve_corrupt:
+            backup = f"{path}.corrupt-{time.time_ns()}"
+            try:
+                shutil.copy2(path, backup)
+            except OSError:
+                pass
     return []
 
 
@@ -103,7 +111,7 @@ def persist_incident(record: IncidentRecord, path: str = INCIDENTS_PATH) -> None
     lock_file = open(lock_path, "w", encoding="utf-8")
     try:
         fcntl.flock(lock_file, fcntl.LOCK_EX)
-        records = _load_existing_records(path)
+        records = _load_existing_records(path, preserve_corrupt=True)
         records.insert(0, record_dict)
         records = records[:MAX_RECORDS]
         _write_records_atomically(records, path)
@@ -114,3 +122,24 @@ def persist_incident(record: IncidentRecord, path: str = INCIDENTS_PATH) -> None
 
 def load_incidents(path: str = INCIDENTS_PATH) -> List[Dict[str, Any]]:
     return _load_existing_records(path)
+
+
+def record_duplicate(incident_fingerprint: str, path: str = INCIDENTS_PATH) -> bool:
+    """Atomically increment a persisted incident's duplicate counter."""
+    directory = os.path.dirname(path) or SHARED_DATA_DIR
+    lock_path = os.path.join(directory, ".aiops_incidents.lock")
+    os.makedirs(directory, exist_ok=True)
+    lock_file = open(lock_path, "w", encoding="utf-8")
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        records = _load_existing_records(path, preserve_corrupt=True)
+        for record in records:
+            if record.get("incident_fingerprint") == incident_fingerprint:
+                record["duplicate_count"] = int(record.get("duplicate_count", 0)) + 1
+                record["last_seen"] = datetime.now(timezone.utc).isoformat()
+                _write_records_atomically(records[:MAX_RECORDS], path)
+                return True
+        return False
+    finally:
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+        lock_file.close()

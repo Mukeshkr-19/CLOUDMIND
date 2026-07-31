@@ -15,12 +15,14 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import docker
 import requests
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from prometheus_client.parser import text_string_to_metric_families
 
 try:
-    from . import aiops_models, llm_engine, telemetry_collector, incident_intelligence, policy_engine, incident_store, recovery_verifier
+    from . import aiops_metrics, aiops_models, llm_engine, telemetry_collector, incident_intelligence, policy_engine, incident_store, recovery_verifier, remediation_guard
 except ImportError:
+    import aiops_metrics
     import aiops_models
     import llm_engine
     import telemetry_collector
@@ -28,6 +30,7 @@ except ImportError:
     import policy_engine
     import incident_store
     import recovery_verifier
+    import remediation_guard
 
 # ----------------------------
 # Config (env overrides)
@@ -114,6 +117,9 @@ AIOPS_QUEUE_CAPACITY = _env_int("AIOPS_QUEUE_CAPACITY", 10, 0, 500)
 ERROR_RATIO_THRESHOLD = _env_float("AIOPS_ERROR_RATIO_THRESHOLD", 0.10, 0.0, 1.0)
 AIOPS_EXECUTION_GRACE_SEC = _env_int("AIOPS_EXECUTION_GRACE_SEC", 30, 0, 300)
 AIOPS_PROBE_TIMEOUT_SEC = _env_float("AIOPS_PROBE_TIMEOUT_SEC", 2.0, 0.5, 10.0)
+AIOPS_MAX_RESTARTS_PER_SERVICE_PER_HOUR = _env_int("AIOPS_MAX_RESTARTS_PER_SERVICE_PER_HOUR", 3, 1, 20)
+AIOPS_MAX_FAILED_RECOVERIES = _env_int("AIOPS_MAX_FAILED_RECOVERIES", 2, 1, 20)
+AIOPS_CIRCUIT_BREAKER_RESET_SEC = _env_int("AIOPS_CIRCUIT_BREAKER_RESET_SEC", 900, 30, 86400)
 
 # Process startup monotonic anchor for execution grace window.
 _startup_monotonic = time.monotonic()
@@ -131,6 +137,11 @@ _target_leases: Dict[str, float] = {}
 state_lock = threading.Lock()
 _aiops_executor: Optional[ThreadPoolExecutor] = None
 _work_semaphore: Optional[threading.BoundedSemaphore] = None
+_remediation_guard = remediation_guard.RemediationGuard(
+    max_restarts_per_hour=AIOPS_MAX_RESTARTS_PER_SERVICE_PER_HOUR,
+    max_failed_recoveries=AIOPS_MAX_FAILED_RECOVERIES,
+    circuit_breaker_reset_sec=AIOPS_CIRCUIT_BREAKER_RESET_SEC,
+)
 
 
 def _get_semaphore() -> threading.BoundedSemaphore:
@@ -503,6 +514,9 @@ def _run_aiops_workflow(
 
     if _is_duplicate_event(trigger_service, alertname, dependency, fingerprint, starts_at):
         print(f"[] AIOps event duplicate for {trigger_service}/{alertname}; skipping")
+        incident_store.record_duplicate(
+            _safe_signature(trigger_service, alertname, dependency, fingerprint, starts_at)
+        )
         return
 
     persisted = False
@@ -519,6 +533,8 @@ def _run_aiops_workflow(
         details="Workflow did not complete",
     )
     errors: List[str] = []
+    guard_state: Dict[str, Any] = {}
+    incident_signature = _safe_signature(trigger_service, alertname, dependency, fingerprint, starts_at)
 
     try:
         snapshot = telemetry_collector.collect_telemetry_snapshot(
@@ -526,7 +542,11 @@ def _run_aiops_workflow(
             alertname=alertname,
             reason=reason,
         )
+        aiops_metrics.INCIDENTS.labels(target=trigger_service).inc()
+        diagnosis_started = time.monotonic()
         diagnosis = incident_intelligence.diagnose(snapshot, api_key=GEMINI_KEY, err_ratio_threshold=ERROR_RATIO_THRESHOLD)
+        aiops_metrics.DIAGNOSIS_DURATION.observe(max(0.0, time.monotonic() - diagnosis_started))
+        aiops_metrics.DIAGNOSES.labels(source=diagnosis.source).inc()
 
         policy_decision = policy_engine.evaluate_policy(
             snapshot,
@@ -537,6 +557,16 @@ def _run_aiops_workflow(
             cooldown_seconds=COOLDOWN_SEC,
             err_ratio_threshold=ERROR_RATIO_THRESHOLD,
         )
+        aiops_metrics.POLICY.labels(
+            decision="approved" if policy_decision.approved else "denied",
+            action=policy_decision.action,
+            mode=policy_decision.mode,
+        ).inc()
+        if not policy_decision.approved:
+            aiops_metrics.DENIALS.labels(
+                reason_category=aiops_metrics.reason_category(policy_decision.reason),
+                target=diagnosis.recommended_action.target_service or trigger_service,
+            ).inc()
 
         if not policy_decision.approved:
             execution_result = aiops_models.ExecutionResult(
@@ -596,37 +626,68 @@ def _run_aiops_workflow(
                     errors.append("execution_revalidation_failed")
                 elif _acquire_target_lease(target, now):
                     try:
-                        success = _maybe_heal(target, f"AIOps policy approved {diagnosis.probable_cause}")
-                        execution_result = aiops_models.ExecutionResult(
-                            executed=success,
-                            target=target,
-                            details="Restart executed" if success else "Restart failed",
+                        guard_decision = (
+                            _remediation_guard.reserve_restart(target)
+                            if policy_decision.evidence_assessment
+                            else remediation_guard.GuardDecision(True, "legacy_policy_test", {})
                         )
-                        if success:
-                            restart_time = datetime.now(timezone.utc)
-                            with state_lock:
-                                _last_heal[target] = restart_time
-                            dependency_for_recovery = dependency if dependency and trigger_service == "api" else None
-                            recovery_result = recovery_verifier.verify_recovery(
+                        guard_state = guard_decision.state
+                        if guard_state:
+                            aiops_metrics.BUDGET_REMAINING.labels(target=target).set(guard_state["restart_budget_remaining"])
+                            aiops_metrics.CIRCUIT_OPEN.labels(target=target).set(1 if guard_state["circuit_breaker_open"] else 0)
+                        if not guard_decision.allowed:
+                            execution_result = aiops_models.ExecutionResult(
+                                executed=False,
                                 target=target,
-                                cpu_threshold=CPU_HARD,
-                                lat_threshold=LAT_PAIN_MS,
-                                max_attempts=int(AIOPS_RECOVERY_TIMEOUT_SEC / AIOPS_RECOVERY_POLL_SEC),
-                                interval_seconds=AIOPS_RECOVERY_POLL_SEC,
-                                required_consecutive=AIOPS_REQUIRED_HEALTHY_SAMPLES,
-                                sleep_func=time.sleep,
-                                query_func=_prom_query,
-                                dependency=dependency_for_recovery,
-                                dependency_probe_func=_probe_api_dependency if dependency_for_recovery else None,
+                                details=f"Execution suppressed: {guard_decision.reason}",
                             )
-                            if recovery_result.status == "recovered":
-                                _send_recovered_notification(target, recovery_result.details)
-                        else:
                             recovery_result = aiops_models.RecoveryResult(
-                                status="not_recovered",
-                                details="Recovery verification skipped because restart failed",
+                                status="not_executed",
+                                details=f"Execution suppressed: {guard_decision.reason}",
                             )
-                            errors.append("Restart execution failed")
+                            errors.append(guard_decision.reason)
+                        else:
+                            success = _maybe_heal(target, f"AIOps policy approved {diagnosis.probable_cause}")
+                            aiops_metrics.REMEDIATIONS.labels(target=target, result="executed" if success else "failed").inc()
+                            execution_result = aiops_models.ExecutionResult(
+                                executed=success,
+                                target=target,
+                                details="Restart executed" if success else "Restart failed",
+                            )
+                            if success:
+                                restart_time = datetime.now(timezone.utc)
+                                with state_lock:
+                                    _last_heal[target] = restart_time
+                                dependency_for_recovery = dependency if dependency and trigger_service == "api" else None
+                                recovery_started = time.monotonic()
+                                recovery_result = recovery_verifier.verify_recovery(
+                                    target=target,
+                                    cpu_threshold=CPU_HARD,
+                                    lat_threshold=LAT_PAIN_MS,
+                                    max_attempts=int(AIOPS_RECOVERY_TIMEOUT_SEC / AIOPS_RECOVERY_POLL_SEC),
+                                    interval_seconds=AIOPS_RECOVERY_POLL_SEC,
+                                    required_consecutive=AIOPS_REQUIRED_HEALTHY_SAMPLES,
+                                    sleep_func=time.sleep,
+                                    query_func=_prom_query,
+                                    dependency=dependency_for_recovery,
+                                    dependency_probe_func=_probe_api_dependency if dependency_for_recovery else None,
+                                )
+                                aiops_metrics.RECOVERY_DURATION.observe(max(0.0, time.monotonic() - recovery_started))
+                                aiops_metrics.RECOVERY.labels(target=target, result=recovery_result.status).inc()
+                                if policy_decision.evidence_assessment:
+                                    guard_state = _remediation_guard.record_recovery(target, recovery_result.status == "recovered")
+                                    aiops_metrics.BUDGET_REMAINING.labels(target=target).set(guard_state["restart_budget_remaining"])
+                                    aiops_metrics.CIRCUIT_OPEN.labels(target=target).set(1 if guard_state["circuit_breaker_open"] else 0)
+                                if recovery_result.status == "recovered":
+                                    _send_recovered_notification(target, recovery_result.details)
+                            else:
+                                recovery_result = aiops_models.RecoveryResult(
+                                    status="not_recovered",
+                                    details="Recovery verification skipped because restart failed",
+                                )
+                                if policy_decision.evidence_assessment:
+                                    guard_state = _remediation_guard.record_recovery(target, False)
+                                errors.append("Restart execution failed")
                     finally:
                         _release_target_lease(target)
                 else:
@@ -670,6 +731,12 @@ def _run_aiops_workflow(
             execution_result=execution_result,
             recovery_result=recovery_result,
             completed_at=aiops_models.utc_now_iso(),
+            incident_fingerprint=incident_signature,
+            restart_budget_state=guard_state,
+            circuit_breaker_state={
+                "open": bool(guard_state.get("circuit_breaker_open", False)),
+                "reset_in_sec": guard_state.get("circuit_breaker_reset_in_sec", 0.0),
+            },
         )
         if errors:
             record = aiops_models.IncidentRecord(
@@ -746,6 +813,12 @@ def _run_aiops_workflow(
                     recovery_result=record.recovery_result,
                     model_source=record.model_source,
                     errors=errors,
+                    incident_fingerprint=record.incident_fingerprint,
+                    duplicate_count=record.duplicate_count,
+                    first_seen=record.first_seen,
+                    last_seen=record.last_seen,
+                    restart_budget_state=record.restart_budget_state,
+                    circuit_breaker_state=record.circuit_breaker_state,
                 )
             incident_store.persist_incident(record)
             persisted = True
@@ -950,6 +1023,22 @@ def watch():
 
 # SRE Webhook /whisper Receiver
 app = Flask(__name__)
+
+
+@app.route("/metrics", methods=["GET"])
+def aiops_prometheus_metrics():
+    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+
+
+@app.route("/aiops/circuit-breakers/<target>/reset", methods=["POST"])
+def reset_circuit_breaker(target: str):
+    if not _authorized_request():
+        return jsonify({"status": "rejected", "reason": "unauthorized"}), 401
+    if target not in aiops_models.ALLOWED_SERVICES:
+        return jsonify({"status": "rejected", "reason": "invalid service"}), 400
+    state = _remediation_guard.reset(target)
+    aiops_metrics.CIRCUIT_OPEN.labels(target=target).set(0)
+    return jsonify({"status": "reset", "target": target, "state": state}), 200
 
 
 # Allowlist for alertname and dependency identifiers
