@@ -2,7 +2,7 @@
 
 Date: 2026-07-30
 
-Branch: `hardening/aiops-v2-portfolio`
+Released branches: `main` and `aiops-intelligence`
 
 Base commit: `c3e4d5c4cf3d0bf8c65c045d8f608dfda5406a20` (`origin/main` at branch creation)
 
@@ -69,7 +69,7 @@ The separate live Docker run passed API overload, database bottleneck, cache fai
 
 ```text
 git fetch --all --tags --prune
-git switch -c hardening/aiops-v2-portfolio origin/main
+git switch aiops-intelligence
 python3 -m compileall -q .
 make verify
 docker compose config --quiet

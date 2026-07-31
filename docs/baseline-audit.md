@@ -10,7 +10,7 @@ Baseline commit: `c3e4d5c4cf3d0bf8c65c045d8f608dfda5406a20`
 
 - Repository: `/Users/sanjay/Documents/CloudMind`
 - Working tree before changes: clean; local `main` matched `origin/main`
-- Hardening branch: `hardening/aiops-v2-portfolio`, created from freshly fetched `origin/main`
+- Implementation work was based on freshly fetched `origin/main` and released to `aiops-intelligence` and `main` by fast-forward.
 - Python: 3.14.6 locally; workflows target Python 3.12
 - Docker: 29.2.1
 - Docker Compose: v5.1.0
