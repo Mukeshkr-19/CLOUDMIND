@@ -1,5 +1,12 @@
 name: CloudMind CI
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
@@ -15,17 +22,17 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.12"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Guard private env files
         run: |
@@ -37,8 +44,26 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall microservices inframirror scripts tests
 
-      - name: Run unit tests
-        run: python -m unittest discover -s tests
+      - name: Lint hardened modules
+        run: ruff check .
+
+      - name: Type-check hardened modules
+        run: mypy inframirror/gemini_client.py inframirror/evidence_grounding.py inframirror/policy_engine.py inframirror/remediation_guard.py
+
+      - name: Run tests with safety-module coverage
+        run: >-
+          pytest
+          --cov=inframirror.gemini_client
+          --cov=inframirror.evidence_grounding
+          --cov=inframirror.incident_intelligence
+          --cov=inframirror.policy_engine
+          --cov=inframirror.incident_store
+          --cov=inframirror.remediation_guard
+          --cov=inframirror.recovery_verifier
+          --cov-branch --cov-report=term-missing --cov-fail-under=80
+
+      - name: Run deterministic AIOps scenario matrix
+        run: python scripts/run_aiops_scenarios.py --generate-deterministic-report
 
       - name: Validate Docker Compose config
         env:
